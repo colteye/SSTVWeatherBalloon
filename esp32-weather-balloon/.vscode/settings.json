@@ -1,0 +1,20 @@
+{
+  "C_Cpp.intelliSenseEngine": "Tag Parser",
+  "cmake.configureOnOpen": false,
+  "idf.espIdfPathWin": "C:\\Users\\colte\\esp\\esp-idf\\",
+  "idf.toolsPathWin": "C:\\Users\\colte\\esp\\esp-idf\\tools",
+  "files.associations": {
+    "task.h": "c",
+    "esp_system.h": "c",
+    "esp_spi_flash.h": "c",
+    "esp_camera.h": "c",
+    "*.ipp": "c",
+    "mcpwm_reg.h": "c",
+    "mcpwm_struct.h": "c",
+    "mcpwm.h": "c",
+    "chrono": "c",
+    "ets_sys.h": "c",
+    "sstv.h": "c",
+    "*.inc": "c"
+  }
+}
