@@ -15,6 +15,14 @@
     "chrono": "c",
     "ets_sys.h": "c",
     "sstv.h": "c",
-    "*.inc": "c"
+    "*.inc": "c",
+    "*.tcc": "c",
+    "streambuf": "c",
+    "timer.h": "c",
+    "ratio": "c",
+    "complex.h": "c",
+    "math.h": "c",
+    "complex": "c",
+    "cmath": "c"
   }
 }

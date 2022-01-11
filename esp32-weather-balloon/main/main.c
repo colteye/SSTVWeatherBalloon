@@ -7,6 +7,7 @@
 
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
+#include "freertos/queue.h"
 
 #include "sstv.h"
 #include "esp_camera.h"
@@ -85,7 +86,8 @@ static esp_err_t init_camera()
 
 void app_main()
 {
-    init_tone();
+    sstv_init();
+
     if (ESP_OK != init_camera())
     {
         return;
@@ -101,9 +103,12 @@ void app_main()
         esp_camera_fb_return(pic);
 
         ESP_LOGI(TAG, "Transmitting picture with MARTIN 2 SSTV...");
-        sstv_transmit(pic);
 
-        ESP_LOGI(TAG, "Finished Transmitting!");
+        //sstv_transmit(pic);
+        sstv_generate_audio(pic);
+        ESP_LOGI(TAG, "Finished Processing!");
+        sstv_play_audio();
+
         vTaskDelay(5000);
     }
 }
