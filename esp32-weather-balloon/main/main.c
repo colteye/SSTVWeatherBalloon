@@ -102,12 +102,15 @@ void app_main()
         ESP_LOGI(TAG, "Picture taken! Its size was: %zu bytes", pic->len);
         esp_camera_fb_return(pic);
 
-        ESP_LOGI(TAG, "Transmitting picture with MARTIN 2 SSTV...");
+        ESP_LOGI(TAG, "Processing picture with MARTIN 2 SSTV...");
 
         //sstv_transmit(pic);
         sstv_generate_audio(pic);
         ESP_LOGI(TAG, "Finished Processing!");
+        ESP_LOGI(TAG, "Playing SSTV signal...");
         sstv_play_audio();
+
+        ESP_LOGI(TAG, "Finished Playing!");
 
         vTaskDelay(5000);
     }

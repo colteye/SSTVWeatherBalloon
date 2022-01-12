@@ -1,7 +1,7 @@
 #include "sstv.h"
 
 float complex audio_osc = 0.25;
-uint8_t read_audio_sample;
+uint8_t read_audio_bit;
 
 // MODIFIED FROM:
 // An implementation of a Martin M1 encoder
@@ -9,57 +9,71 @@ uint8_t read_audio_sample;
 // https://github.com/brainwagon/sstv-encoders/blob/master/martin.c
 
 // Write pulse for specified frequency and amount of time
-// Converted to an integer later to output square wave.
+// Convert output from raw sine wave to PWM.
 void write_pulse(float freq, float ms, uint32_t *offset)
 {
     /* convert ms to samples */
-    uint32_t nsamp = (uint32_t)roundf(SAMPLE_RATE * ms / 1000.);
-    uint32_t i;
-    float r;
+    uint32_t nsamp_bits = (uint32_t)roundf(SAMPLE_RATE * ms / 1000.) * BITS_PER_SAMPLE;
     float complex m = cexp(I * 2.0 * M_PI * freq / (float)SAMPLE_RATE);
 
-    for (i = 0; i < nsamp; i++)
+    for (uint32_t i = 0; i < nsamp_bits; i += BITS_PER_SAMPLE)
     {
         audio_osc *= m;
-        r = crealf(audio_osc);
+        float r = crealf(audio_osc);
 
-        if (r > 0.0)
+        // Convert continuous sine wave into PWM signals to play on ESP32CAM.
+        // No access to ADC :-(
+        // Save to buffer for playback later.
+        // TODO: Maybe pass data to external chip with ADC?
+        for (uint8_t j = 1; j <= SSTV_NUM_PWM_LEVELS; ++j)
         {
-            uint32_t byte_idx = (*offset + i) / BYTE_SIZE;
-            uint8_t bit_idx = (*offset + i) % BYTE_SIZE;
-            AUDIO_BUFFER[byte_idx] |= 1UL << bit_idx;
+            if (IN_RANGE(SSTV_PWM_RANGES[j - 1], SSTV_PWM_RANGES[j], r))
+            {
+                uint32_t byte_idx = (*offset + i) / BYTE_SIZE;
+                uint8_t bit_idx = (*offset + i) % BYTE_SIZE;
+
+                // Set either 0 bits, 1 bit, or 2 bits depending on PWM range.
+                // j tells us how many bits will be 1.
+                for (uint8_t k = 0; k < j; ++k)
+                {
+                    AUDIO_BUFFER[byte_idx] |= 1UL << (bit_idx + k);
+                }
+
+                // Break because we found the right range.
+                break;
+            }
         }
     }
-    *offset += nsamp;
+    *offset += nsamp_bits;
 }
 
-float sstv_pixel_to_period(uint16_t pix, uint8_t color)
+float sstv_pixel_to_freq(uint16_t pix, uint8_t color)
 {
-    float period = 0.;
+    float freq = 0.0;
 
     // Convert into index to turn into freq (Based on RGB565 for bitmasking)
     if (color == RED)
     {
         pix = (pix & 0b1111100000000000) >> 11;
-        period = RB_PERIOD_LUT[pix];
+        freq = RB_FREQ_LUT[pix];
     }
     else if (color == GREEN)
     {
         pix = (pix & 0b0000011111100000) >> 5;
-        period = G_PERIOD_LUT[pix];
+        freq = G_FREQ_LUT[pix];
     }
     else // BLUE
     {
         pix = pix & 0b0000000000011111;
-        period = RB_PERIOD_LUT[pix];
+        freq = RB_FREQ_LUT[pix];
     }
-    return period;
+    return freq;
 }
 
 void sstv_start_line(uint32_t *offset)
 {
-    write_pulse(SSTV_1200HZ_PERIOD, SSTV_MARTIN_2_PULSE_PERIOD, offset);
-    write_pulse(SSTV_1500HZ_PERIOD, SSTV_MARTIN_2_PORCH_PERIOD, offset);
+    write_pulse(SSTV_1200HZ, SSTV_MARTIN_2_PULSE_MS, offset);
+    write_pulse(SSTV_1500HZ, SSTV_MARTIN_2_PORCH_MS, offset);
 }
 
 void sstv_camera_line(camera_fb_t *pic, uint16_t line, uint8_t color, uint32_t *offset)
@@ -68,22 +82,22 @@ void sstv_camera_line(camera_fb_t *pic, uint16_t line, uint8_t color, uint32_t *
     for (uint16_t i = 0; i < (pic->width << 1); i += 2)
     {
         uint16_t pix = ((uint16_t)pic->buf[i * line] << 8) | pic->buf[(i + 1) * line];
-        float freq_period = sstv_pixel_to_period(pix, color);
-        write_pulse(freq_period, SSTV_MARTIN_2_SCAN_PERIOD, offset);
-        //write_pulse(SSTV_1500HZ_PERIOD, SSTV_MARTIN_2_SCAN_PERIOD, offset);
+        float freq = sstv_pixel_to_freq(pix, color);
+        write_pulse(freq, SSTV_MARTIN_2_SCAN_MS, offset);
+        //write_pulse(SSTV_1500HZ, SSTV_MARTIN_2_SCAN_MS, offset);
     }
-    write_pulse(SSTV_1500HZ_PERIOD, SSTV_MARTIN_2_SEPARATOR_PERIOD, offset);
+    write_pulse(SSTV_1500HZ, SSTV_MARTIN_2_SEPARATOR_MS, offset);
 }
 
-void sstv_banner_line(uint16_t pic_width, uint16_t line, uint8_t color, uint32_t *offset)
+void sstv_callsign_line(uint16_t pic_width, uint16_t line, uint8_t color, uint32_t *offset)
 {
     // Iterate over length of width * 2 to account for 2 uint8 -> uint16_t
     for (uint16_t i = 0; i < pic_width; ++i)
     {
-        float freq_period = sstv_pixel_to_period(SSTV_CALLSIGN[i * line], color);
-        write_pulse(freq_period, SSTV_MARTIN_2_SCAN_PERIOD, offset);
+        float freq = sstv_pixel_to_freq(SSTV_CALLSIGN[i * line], color);
+        write_pulse(freq, SSTV_MARTIN_2_SCAN_MS, offset);
     }
-    write_pulse(SSTV_1500HZ_PERIOD, SSTV_MARTIN_2_SEPARATOR_PERIOD, offset);
+    write_pulse(SSTV_1500HZ, SSTV_MARTIN_2_SEPARATOR_MS, offset);
 }
 
 void sstv_generate_audio(camera_fb_t *pic)
@@ -91,33 +105,32 @@ void sstv_generate_audio(camera_fb_t *pic)
     // First part of message.
     // Offset automatically incremented to correct location.
     uint32_t offset = 0;
-    write_pulse(SSTV_1900HZ_PERIOD, SSTV_300MS_PERIOD, &offset);
-    write_pulse(SSTV_1200HZ_PERIOD, SSTV_10MS_PERIOD, &offset);
-    write_pulse(SSTV_1900HZ_PERIOD, SSTV_300MS_PERIOD, &offset);
-    write_pulse(SSTV_1200HZ_PERIOD, SSTV_30MS_PERIOD, &offset);
+    write_pulse(SSTV_1900HZ, SSTV_300MS, &offset);
+    write_pulse(SSTV_1200HZ, SSTV_10MS, &offset);
+    write_pulse(SSTV_1900HZ, SSTV_300MS, &offset);
+    write_pulse(SSTV_1200HZ, SSTV_30MS, &offset);
 
     for (int i = 0; i < BYTE_SIZE; ++i)
     {
         if (SSTV_MARTIN_2_VIS_BITS[i])
         {
-            write_pulse(SSTV_1100HZ_PERIOD, SSTV_30MS_PERIOD, &offset);
+            write_pulse(SSTV_1100HZ, SSTV_30MS, &offset);
         }
         else
         {
-            write_pulse(SSTV_1300HZ_PERIOD, SSTV_30MS_PERIOD, &offset);
+            write_pulse(SSTV_1300HZ, SSTV_30MS, &offset);
         }
     }
-    write_pulse(SSTV_1200HZ_PERIOD, SSTV_30MS_PERIOD, &offset);
+    write_pulse(SSTV_1200HZ, SSTV_30MS, &offset);
 
     // Main Message.
-
-    // Transmit banner
-    for (uint16_t i = 0; i < BANNER_HEIGHT; ++i)
+    // Transmit callsign
+    for (uint16_t i = 0; i < CALLSIGN_HEIGHT; ++i)
     {
         sstv_start_line(&offset);
-        sstv_banner_line(pic->width, i, GREEN, &offset);
-        sstv_banner_line(pic->width, i, BLUE, &offset);
-        sstv_banner_line(pic->width, i, RED, &offset);
+        sstv_callsign_line(pic->width, i, GREEN, &offset);
+        sstv_callsign_line(pic->width, i, BLUE, &offset);
+        sstv_callsign_line(pic->width, i, RED, &offset);
     }
 
     // Transmit image
@@ -150,7 +163,7 @@ void IRAM_ATTR sstv_play_audio_isr(void *para)
     /* Clear the interrupt */
     if ((intr_status & BIT(timer_idx)) && timer_idx == TIMER_1)
     {
-        read_audio_sample = 1;
+        read_audio_bit = 1;
         TIMERG0.int_clr_timers.t1 = 1;
     }
 
@@ -197,7 +210,6 @@ void sstv_init()
     AUDIO_BUFFER = (uint8_t *)calloc(AUDIO_BUFFER_LEN, sizeof(uint8_t));
 
     sstv_init_timer();
-    timer_start(TIMER_GROUP_0, SSTV_AUDIO_TIMER);
 }
 
 void sstv_close()
@@ -207,25 +219,26 @@ void sstv_close()
 
 void sstv_play_audio()
 {
-    uint32_t current_audio_sample = 0;
+
+    timer_start(TIMER_GROUP_0, SSTV_AUDIO_TIMER);
+    uint32_t current_audio_bit = 0;
     while (1)
     {
-        if (read_audio_sample)
+        // Retrieve interrupt flag change.
+        if (read_audio_bit)
         {
-            uint32_t byte_idx = current_audio_sample / BYTE_SIZE;
-            uint8_t bit_idx = current_audio_sample % BYTE_SIZE;
+            uint32_t byte_idx = current_audio_bit / BYTE_SIZE;
+            uint8_t bit_idx = current_audio_bit % BYTE_SIZE;
             uint8_t level = (AUDIO_BUFFER[byte_idx] & BIT(bit_idx)) > 0;
 
             gpio_set_level(AUDIO_GPIO, level);
-            ++current_audio_sample;
-            read_audio_sample = 0;
+            ++current_audio_bit;
+            read_audio_bit = 0;
 
-            // Play current sample.
-            if (current_audio_sample >= (SAMPLE_RATE * CLIP_LENGTH))
-            {
-                // Once played, audio no longer available!
+            // Once played, audio no longer available!
+            if (current_audio_bit >= (SAMPLE_RATE * CLIP_LENGTH * BITS_PER_SAMPLE))
                 return;
-            }
         }
     }
+    timer_pause(TIMER_GROUP_0, SSTV_AUDIO_TIMER);
 }
