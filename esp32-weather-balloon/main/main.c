@@ -102,7 +102,7 @@ void app_main()
         ESP_LOGI(TAG, "Picture taken! Its size was: %zu bytes", pic->len);
         esp_camera_fb_return(pic);
 
-        ESP_LOGI(TAG, "Processing picture with MARTIN 2 SSTV...");
+        ESP_LOGI(TAG, "Processing picture with SCOTTIE 1 SSTV...");
 
         //sstv_transmit(pic);
         sstv_generate_audio(pic);

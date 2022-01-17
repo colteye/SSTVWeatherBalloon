@@ -17,8 +17,8 @@ def freq_2_period(clk_speed, freq):
     freq_back = clk_speed / period
     print(freq_back)'''
     
-    if (freq % 2) != 0:
-        freq += 1
+    '''if (freq % 2) != 0:
+        freq += 1'''
     
     #return int(round(clk_speed / freq)) - 1
     return float(freq)
@@ -37,10 +37,10 @@ def freq_2_period2(clk_speed, freq):
     return period
 
 for color_byte in range(RB_MAX_SIZE):
-    rb_lutp.append( str( freq_2_period(CLK_SAMPLERATE, start_freq + (color_byte *  (BIT_24_SIZE / RB_MAX_SIZE) * 3.1372549)) ))
+    rb_lutp.append( str( freq_2_period(CLK_SAMPLERATE, start_freq + (color_byte *  (BIT_24_SIZE / RB_MAX_SIZE) * 3.1372549)) )+"f")
     
 for color_byte in range(G_MAX_SIZE):
-    g_lutp.append( str( freq_2_period(CLK_SAMPLERATE, start_freq + (color_byte * (BIT_24_SIZE / G_MAX_SIZE) * 3.1372549)) ))
+    g_lutp.append( str( freq_2_period(CLK_SAMPLERATE, start_freq + (color_byte * (BIT_24_SIZE / G_MAX_SIZE) * 3.1372549)) )+"f")
 
 
 
@@ -52,10 +52,10 @@ print(f"#define SSTV_1500HZ_PERIOD {str( freq_2_period(CLK_SAMPLERATE, 1500 ))}"
 print(f"#define SSTV_1900HZ_PERIOD {str( freq_2_period(CLK_SAMPLERATE, 1900 ))}")
 
 for color_byte in range(RB_MAX_SIZE):
-    rb_lut.append( str( freq_2_period(clk_speed, start_freq + int(round(color_byte *  (BIT_24_SIZE / RB_MAX_SIZE) * 3.1372549))) ) )
+    rb_lut.append( str( freq_2_period(clk_speed, start_freq + int(round(color_byte *  (BIT_24_SIZE / RB_MAX_SIZE) * 3.1372549))) )+"f" )
     
 for color_byte in range(G_MAX_SIZE):
-    g_lut.append( str( freq_2_period(clk_speed, start_freq + int(round(color_byte * (BIT_24_SIZE / G_MAX_SIZE) * 3.1372549))) ) )
+    g_lut.append( str( freq_2_period(clk_speed, start_freq + int(round(color_byte * (BIT_24_SIZE / G_MAX_SIZE) * 3.1372549))) )+"f" )
    
 print (f"\nstatic const uint32_t RB_FREQ_LUT[{RB_MAX_SIZE}] = {{{','.join(rb_lut)}}};")
 

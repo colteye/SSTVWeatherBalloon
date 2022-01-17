@@ -23,6 +23,10 @@
     "complex.h": "c",
     "math.h": "c",
     "complex": "c",
-    "cmath": "c"
+    "cmath": "c",
+    "random": "c",
+    "limits": "c",
+    "future": "c",
+    "system_error": "c"
   }
 }

@@ -1,8 +1,5 @@
 #include "sstv.h"
 
-float complex audio_osc = 0.25;
-uint8_t read_audio_bit;
-
 // MODIFIED FROM:
 // An implementation of a Martin M1 encoder
 // Written by Mark VandeWettering (K6HX)
@@ -10,6 +7,10 @@ uint8_t read_audio_bit;
 
 // Write pulse for specified frequency and amount of time
 // Convert output from raw sine wave to PWM.
+
+float complex audio_osc = 0.25;
+uint8_t read_audio_bit;
+
 void write_pulse(float freq, float ms, uint32_t *offset)
 {
     /* convert ms to samples */
@@ -24,15 +25,16 @@ void write_pulse(float freq, float ms, uint32_t *offset)
         // Convert continuous sine wave into PWM signals to play on ESP32CAM.
         // No access to ADC :-(
         // Save to buffer for playback later.
-        // TODO: Maybe pass data to external chip with ADC?
-        for (uint8_t j = 1; j <= SSTV_NUM_PWM_LEVELS; ++j)
+        float min = SSTV_SINE_MIN;
+        float max = SSTV_SINE_MIN + SSTV_PWM_RANGE_ADDR;
+        for (uint8_t j = 0; j < SSTV_NUM_PWM_LEVELS; ++j)
         {
-            if (IN_RANGE(SSTV_PWM_RANGES[j - 1], SSTV_PWM_RANGES[j], r))
+            if (IN_RANGE(min, max, r))
             {
                 uint32_t byte_idx = (*offset + i) / BYTE_SIZE;
                 uint8_t bit_idx = (*offset + i) % BYTE_SIZE;
 
-                // Set either 0 bits, 1 bit, or 2 bits depending on PWM range.
+                // Set either 0 bits, 1 bit... n bits depending on PWM range.
                 // j tells us how many bits will be 1.
                 for (uint8_t k = 0; k < j; ++k)
                 {
@@ -42,6 +44,9 @@ void write_pulse(float freq, float ms, uint32_t *offset)
                 // Break because we found the right range.
                 break;
             }
+
+            min += SSTV_PWM_RANGE_ADDR;
+            max += SSTV_PWM_RANGE_ADDR;
         }
     }
     *offset += nsamp_bits;
@@ -70,34 +75,31 @@ float sstv_pixel_to_freq(uint16_t pix, uint8_t color)
     return freq;
 }
 
-void sstv_start_line(uint32_t *offset)
-{
-    write_pulse(SSTV_1200HZ, SSTV_MARTIN_2_PULSE_MS, offset);
-    write_pulse(SSTV_1500HZ, SSTV_MARTIN_2_PORCH_MS, offset);
-}
-
 void sstv_camera_line(camera_fb_t *pic, uint16_t line, uint8_t color, uint32_t *offset)
 {
+    // Start at current line
+    uint32_t l_idx = pic->width * 2 * line;
+
     // Iterate over length of width * 2 to account for 2 uint8 -> uint16_t
-    for (uint16_t i = 0; i < (pic->width << 1); i += 2)
+    for (uint16_t i = 0; i < pic->width * 2; i += 2)
     {
-        uint16_t pix = ((uint16_t)pic->buf[i * line] << 8) | pic->buf[(i + 1) * line];
+        uint16_t pix = ((uint16_t)pic->buf[l_idx + i] << 8) | pic->buf[l_idx + (i + 1)];
         float freq = sstv_pixel_to_freq(pix, color);
-        write_pulse(freq, SSTV_MARTIN_2_SCAN_MS, offset);
-        //write_pulse(SSTV_1500HZ, SSTV_MARTIN_2_SCAN_MS, offset);
+        write_pulse(freq, SSTV_SCOTTIE_1_SCAN_MS, offset);
     }
-    write_pulse(SSTV_1500HZ, SSTV_MARTIN_2_SEPARATOR_MS, offset);
 }
 
 void sstv_callsign_line(uint16_t pic_width, uint16_t line, uint8_t color, uint32_t *offset)
 {
-    // Iterate over length of width * 2 to account for 2 uint8 -> uint16_t
+    // Start at current line
+    uint32_t l_idx = pic_width * line;
+
+    // Iterate over length of width
     for (uint16_t i = 0; i < pic_width; ++i)
     {
-        float freq = sstv_pixel_to_freq(SSTV_CALLSIGN[i * line], color);
-        write_pulse(freq, SSTV_MARTIN_2_SCAN_MS, offset);
+        float freq = sstv_pixel_to_freq(SSTV_CALLSIGN[l_idx + i], color);
+        write_pulse(freq, SSTV_SCOTTIE_1_SCAN_MS, offset);
     }
-    write_pulse(SSTV_1500HZ, SSTV_MARTIN_2_SEPARATOR_MS, offset);
 }
 
 void sstv_generate_audio(camera_fb_t *pic)
@@ -105,40 +107,87 @@ void sstv_generate_audio(camera_fb_t *pic)
     // First part of message.
     // Offset automatically incremented to correct location.
     uint32_t offset = 0;
+
+    /** VOX TONE (OPTIONAL) **/
+    write_pulse(SSTV_1900HZ, SSTV_100MS, &offset);
+    write_pulse(SSTV_1500HZ, SSTV_100MS, &offset);
+    write_pulse(SSTV_1900HZ, SSTV_100MS, &offset);
+    write_pulse(SSTV_1500HZ, SSTV_100MS, &offset);
+    write_pulse(SSTV_2300HZ, SSTV_100MS, &offset);
+    write_pulse(SSTV_1500HZ, SSTV_100MS, &offset);
+    write_pulse(SSTV_2300HZ, SSTV_100MS, &offset);
+    write_pulse(SSTV_1500HZ, SSTV_100MS, &offset);
+
+    /** Playing VIS CODE **/
     write_pulse(SSTV_1900HZ, SSTV_300MS, &offset);
     write_pulse(SSTV_1200HZ, SSTV_10MS, &offset);
     write_pulse(SSTV_1900HZ, SSTV_300MS, &offset);
     write_pulse(SSTV_1200HZ, SSTV_30MS, &offset);
 
-    for (int i = 0; i < BYTE_SIZE; ++i)
+    uint8_t code = SSTV_SCOTTIE_1_VIS_CODE;
+    uint8_t parity = 0;
+    for (uint8_t i = 0; i < 7; i++)
     {
-        if (SSTV_MARTIN_2_VIS_BITS[i])
+        if (code & 1)
         {
             write_pulse(SSTV_1100HZ, SSTV_30MS, &offset);
+            ++parity; /* parity */
         }
         else
         {
             write_pulse(SSTV_1300HZ, SSTV_30MS, &offset);
         }
+        code = code >> 1;
     }
+
+    if (parity & 1)
+    {
+        write_pulse(SSTV_1100HZ, SSTV_30MS, &offset); /* Output a 1 */
+    }
+    else
+    {
+        write_pulse(SSTV_1300HZ, SSTV_30MS, &offset); /* Output a 0 */
+    }
+
+    // Stop bit.
     write_pulse(SSTV_1200HZ, SSTV_30MS, &offset);
 
     // Main Message.
     // Transmit callsign
+
+    // First line pulse.
+    write_pulse(SSTV_1200HZ, SSTV_SCOTTIE_1_PULSE_MS, &offset);
+
     for (uint16_t i = 0; i < CALLSIGN_HEIGHT; ++i)
     {
-        sstv_start_line(&offset);
+        write_pulse(SSTV_1500HZ, SSTV_SCOTTIE_1_SEPARATOR_MS, &offset);
+
         sstv_callsign_line(pic->width, i, GREEN, &offset);
+
+        write_pulse(SSTV_1500HZ, SSTV_SCOTTIE_1_SEPARATOR_MS, &offset);
+
         sstv_callsign_line(pic->width, i, BLUE, &offset);
+
+        write_pulse(SSTV_1200HZ, SSTV_SCOTTIE_1_PULSE_MS, &offset);
+        write_pulse(SSTV_1500HZ, SSTV_SCOTTIE_1_PORCH_MS, &offset);
+
         sstv_callsign_line(pic->width, i, RED, &offset);
     }
 
     // Transmit image
     for (uint16_t i = 0; i < pic->height; ++i)
     {
-        sstv_start_line(&offset);
+        write_pulse(SSTV_1500HZ, SSTV_SCOTTIE_1_SEPARATOR_MS, &offset);
+
         sstv_camera_line(pic, i, GREEN, &offset);
+
+        write_pulse(SSTV_1500HZ, SSTV_SCOTTIE_1_SEPARATOR_MS, &offset);
+
         sstv_camera_line(pic, i, BLUE, &offset);
+
+        write_pulse(SSTV_1200HZ, SSTV_SCOTTIE_1_PULSE_MS, &offset);
+        write_pulse(SSTV_1500HZ, SSTV_SCOTTIE_1_PORCH_MS, &offset);
+
         sstv_camera_line(pic, i, RED, &offset);
     }
 }
