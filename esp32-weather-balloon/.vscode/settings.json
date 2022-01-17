@@ -27,6 +27,11 @@
     "random": "c",
     "limits": "c",
     "future": "c",
-    "system_error": "c"
+    "system_error": "c",
+    "camera.h": "c",
+    "nvs_flash.h": "c",
+    "ledc.h": "c",
+    "soc_caps.h": "c",
+    "esp_log.h": "c"
   }
 }
