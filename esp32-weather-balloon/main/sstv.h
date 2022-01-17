@@ -9,9 +9,6 @@
 #include "esp_camera.h"
 #include "driver/timer.h"
 
-#include <esp_log.h>
-static const char *TAG3 = "example:take_picture";
-
 #include "freertos/FreeRTOS.h"
 #include "freertos/queue.h"
 #include "freertos/task.h"

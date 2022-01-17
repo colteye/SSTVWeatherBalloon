@@ -104,7 +104,6 @@ void app_main()
 
         ESP_LOGI(TAG, "Processing picture with SCOTTIE 1 SSTV...");
 
-        //sstv_transmit(pic);
         sstv_generate_audio(pic);
         ESP_LOGI(TAG, "Finished Processing!");
         ESP_LOGI(TAG, "Playing SSTV signal...");
