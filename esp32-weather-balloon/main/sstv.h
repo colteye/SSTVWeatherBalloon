@@ -143,6 +143,6 @@ void sstv_generate_output(camera_fb_t *pic);
 void sstv_timer_init(void);
 
 // Task which repeatedly takes pictures and transmits them via SSTV.
-void vSSTVTakePicture(void *pvParameters);
+void SSTVCameraServiceTask(void *pvParameters);
 
 #endif /* _SSTV_H */

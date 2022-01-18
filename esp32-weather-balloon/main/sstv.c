@@ -314,7 +314,7 @@ void sstv_buffer_clear(void)
     free(OUTPUT_BUFFER);
 }
 
-void vSSTVTakePicture(void *pvParameters)
+void SSTVCameraServiceTask(void *pvParameters)
 {
     // Initialize SSTV transmission and camera recording.
     sstv_init();

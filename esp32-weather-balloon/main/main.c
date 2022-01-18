@@ -40,5 +40,5 @@
 void app_main()
 {
     // Create task for taking SSTV pictures.
-    xTaskCreate(vSSTVTakePicture, "SSTV Take Picture", 4096, NULL, tskIDLE_PRIORITY, NULL);
+    xTaskCreate(SSTVCameraServiceTask, "SSTV Camera Service", 4096, NULL, tskIDLE_PRIORITY, NULL);
 }
