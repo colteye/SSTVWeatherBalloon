@@ -3,9 +3,6 @@
 
 #include <esp_log.h>
 #include <esp_system.h>
-#include <nvs_flash.h>
-#include <sys/param.h>
-#include <string.h>
 #include "esp_camera.h"
 
 #define CAM_PIN_PWDN 32

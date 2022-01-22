@@ -32,6 +32,17 @@
     "nvs_flash.h": "c",
     "ledc.h": "c",
     "soc_caps.h": "c",
-    "esp_log.h": "c"
+    "esp_log.h": "c",
+    "setjmp.h": "c",
+    "stub_flasher.h": "c",
+    "param.h": "c",
+    "bmp280.h": "c",
+    "array": "c",
+    "string": "c",
+    "string_view": "c",
+    "i2c.h": "c",
+    "error_handling.h": "c",
+    "mpu6050.h": "c",
+    "freertos.h": "c"
   }
 }

@@ -26,7 +26,6 @@
 
 #include <esp_log.h>
 #include <esp_system.h>
-#include <nvs_flash.h>
 #include <sys/param.h>
 #include <string.h>
 
@@ -35,10 +34,25 @@
 #include "freertos/queue.h"
 
 #include "sstv.h"
-#include "camera.h"
+#include "mpu6050.h"
+#include "sensor_i2c.h"
 
 void app_main()
 {
+    i2c_master_init();
+    mpu6050_init();
+    mpu6050_data_out_t data;
+    for (int i = 0; i < 100; ++i)
+    {
+        mpu6050_read(&data);
+        ESP_LOGI("MPU6050 Read", "TEMP: %.6f", data.temperature);
+        ESP_LOGI("MPU6050 Read", "ROTATION X: %.6f", data.gyro_x);
+        ESP_LOGI("MPU6050 Read", "ROTATION Y: %.6f", data.gyro_y);
+        ESP_LOGI("MPU6050 Read", "ROTATION Z: %.6f\n", data.gyro_z);
+        vTaskDelay(1000);
+    }
+    i2c_master_deinit();
+
     // Create task for taking SSTV pictures.
     xTaskCreate(SSTVCameraServiceTask, "SSTV Camera Service", 4096, NULL, tskIDLE_PRIORITY, NULL);
 }

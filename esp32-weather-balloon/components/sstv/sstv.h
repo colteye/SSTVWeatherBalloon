@@ -31,7 +31,6 @@
 #include <math.h>
 
 #include "esp32/rom/ets_sys.h"
-#include "driver/ledc.h"
 #include "driver/timer.h"
 
 #include "freertos/FreeRTOS.h"
@@ -55,7 +54,8 @@
 
 // Output buffer data
 uint8_t *OUTPUT_BUFFER;
-#define OUTPUT_BUFFER_LEN ((SAMPLE_RATE * CLIP_LENGTH * BITS_PER_SAMPLE) / BYTE_SIZE)
+#define BITS_LEN (SAMPLE_RATE * CLIP_LENGTH * BITS_PER_SAMPLE)
+#define OUTPUT_BUFFER_LEN (BITS_LEN / BYTE_SIZE)
 
 // SSTV output related defines
 #define BYTE_SIZE (8)
@@ -120,27 +120,27 @@ static const float G_FREQ_LUT[64] = {1500.0f, 1512.5490196f, 1525.0980392f, 1537
 
 // Write a frequency for a specific number of time into the SSTV buffer as PWM.
 // Uses code from https://github.com/brainwagon/sstv-encoders/blob/master/martin.c
-void write_pulse(float freq, float ms, uint32_t *offset);
+esp_err_t write_pulse(float freq, float ms, uint32_t *offset);
 
 // Initialize GPIO and Timer for SSTV.
-void sstv_init(void);
+esp_err_t sstv_init(void);
+
+// Initialize timer with SSTV options.
+esp_err_t sstv_timer_init(void);
 
 // Initialize or clear SSTV buffer.
-void sstv_buffer_init(void);
+esp_err_t sstv_buffer_init(void);
 void sstv_buffer_clear(void);
 
 // Convert pixel from specific color channel into a frequency.
 float sstv_pixel_to_freq(uint16_t pixel, uint8_t color_channel);
 
 // Generate SSTV waveform for a single line from either camera or callsign.
-void sstv_camera_line(camera_fb_t *pic, uint16_t line, uint8_t color_channel, uint32_t *offset);
-void sstv_callsign_line(uint16_t pic_width, uint16_t line, uint8_t color_channel, uint32_t *offset);
+esp_err_t sstv_camera_line(camera_fb_t *pic, uint16_t line, uint8_t color_channel, uint32_t *offset);
+esp_err_t sstv_callsign_line(uint16_t pic_width, uint16_t line, uint8_t color_channel, uint32_t *offset);
 
 // Generate SSTV waveform of entire image.
-void sstv_generate_output(camera_fb_t *pic);
-
-// Initialize timer with SSTV options.
-void sstv_timer_init(void);
+esp_err_t sstv_generate_output(camera_fb_t *pic);
 
 // Task which repeatedly takes pictures and transmits them via SSTV.
 void SSTVCameraServiceTask(void *pvParameters);

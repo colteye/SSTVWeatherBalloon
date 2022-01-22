@@ -1,8 +1,5 @@
-idf_component_register(SRCS 
-                       "main.c"
-                       "sstv.c"
-                       "camera.c"
-                       "sstv.h"
-                       "sstv_callsign.h"
-                       "camera.h"
-                        INCLUDE_DIRS ".")
+idf_component_register(
+    SRCS main.c
+    INCLUDE_DIRS .
+    REQUIRES sstv mpu6050 sensor_i2c error_handling
+)
