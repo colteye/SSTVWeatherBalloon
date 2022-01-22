@@ -3,11 +3,14 @@
 
 #include <esp_system.h>
 
+// Helpful conversion factors.
 #define SENSORS_GRAVITY_EARTH (9.80665F)
 #define SENSORS_DPS_TO_RADS (0.017453293F)
 
+// MPU 6050 Address.
 #define MPU6050_ADDR (0x68)
 
+// MPU 6050 Registers.
 #define MPU6050_SELF_TEST_X_REG (0x0D)
 #define MPU6050_SELF_TEST_Y_REG (0x0E)
 #define MPU6050_SELF_TEST_Z_REG (0x0F)
@@ -27,6 +30,7 @@
 #define MPU6050_ACCEL_OUT_REG (0x3B)
 #define MPU6050_RESET_BIT 7
 
+// MPU FSYNC configuration options.
 #define MPU6050_FSYNC_OUT_DISABLED (0)
 #define MPU6050_FSYNC_OUT_TEMP (1)
 #define MPU6050_FSYNC_OUT_GYROX (2)
@@ -36,6 +40,7 @@
 #define MPU6050_FSYNC_OUT_ACCELY (6)
 #define MPU6050_FSYNC_OUT_ACCEL_Z (7)
 
+// MPU clock selection options.
 #define MPU6050_INTR_8MHz (0)
 #define MPU6050_PLL_GYROX (1)
 #define MPU6050_PLL_GYROY (2)
@@ -44,11 +49,13 @@
 #define MPU6050_PLL_EXT_19MHz (5)
 #define MPU6050_STOP (7)
 
+// Range of MPU accelerometer values.
 #define MPU6050_RANGE_2_G (0)
 #define MPU6050_RANGE_4_G (1)
 #define MPU6050_RANGE_8_G (2)
 #define MPU6050_RANGE_16_G (3)
 
+// Range of MPU gyroscope.
 #define MPU6050_RANGE_250_DEG (0)
 #define MPU6050_RANGE_500_DEG (1)
 #define MPU6050_RANGE_1000_DEG (2)
@@ -67,7 +74,8 @@
 #define MPU6050_CYCLE_20_HZ (2)
 #define MPU6050_CYCLE_40_HZ (3)
 
-typedef struct data_out_t
+// Data collected by MPU6050.
+typedef struct
 {
     float temperature;
     float acc_x;
@@ -78,10 +86,13 @@ typedef struct data_out_t
     float gyro_z;
 } mpu6050_data_out_t;
 
-esp_err_t mpu6050_register_read(uint8_t reg_addr, uint8_t *data, size_t len);
-esp_err_t mpu6050_register_write_byte(uint8_t reg_addr, uint8_t data);
+// Initialize the MPU6050 chip.
 esp_err_t mpu6050_init(void);
+
+// Reset the MPU6050 chip.
 esp_err_t mpu6050_reset(void);
+
+// Reset all of the data from the MPU6050 chip.
 esp_err_t mpu6050_read(mpu6050_data_out_t *data);
 
-#endif /* _MPU6050_H */
+#endif // _MPU6050_H

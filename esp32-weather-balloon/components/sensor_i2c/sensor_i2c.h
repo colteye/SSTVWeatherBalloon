@@ -12,7 +12,16 @@
 #define I2C_MASTER_RX_BUF_DISABLE 0   // I2C master doesn't need buffer
 #define I2C_MASTER_TIMEOUT_MS 1000
 
+// Initialize ESP32 as an I2C Master.
 esp_err_t i2c_master_init(void);
+
+// Deinitialize ESP32 as an I2C Master.
 esp_err_t i2c_master_deinit(void);
 
-#endif /* _SENSOR_I2C_H */
+// Read an arbitrary number of values at address from a sensor.
+esp_err_t i2c_sensor_register_read(uint8_t sensor_addr, uint8_t reg_addr, uint8_t *data, size_t len);
+
+// Write a byte of data at address from a sensor.
+esp_err_t i2c_sensor_register_write_byte(uint8_t sensor_addr, uint8_t reg_addr, uint8_t data);
+
+#endif // _SENSOR_I2C_H

@@ -145,4 +145,4 @@ esp_err_t sstv_generate_output(camera_fb_t *pic);
 // Task which repeatedly takes pictures and transmits them via SSTV.
 void SSTVCameraServiceTask(void *pvParameters);
 
-#endif /* _SSTV_H */
+#endif // _SSTV_H

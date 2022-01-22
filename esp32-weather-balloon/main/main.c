@@ -34,6 +34,7 @@
 #include "freertos/queue.h"
 
 #include "sstv.h"
+#include "bmp280.h"
 #include "mpu6050.h"
 #include "sensor_i2c.h"
 
@@ -41,14 +42,27 @@ void app_main()
 {
     i2c_master_init();
     mpu6050_init();
-    mpu6050_data_out_t data;
+    bmp280_init();
+    bmp280_data_out_t bmp280_data;
+    mpu6050_data_out_t mpu6050_data;
     for (int i = 0; i < 100; ++i)
     {
-        mpu6050_read(&data);
-        ESP_LOGI("MPU6050 Read", "TEMP: %.6f", data.temperature);
-        ESP_LOGI("MPU6050 Read", "ROTATION X: %.6f", data.gyro_x);
-        ESP_LOGI("MPU6050 Read", "ROTATION Y: %.6f", data.gyro_y);
-        ESP_LOGI("MPU6050 Read", "ROTATION Z: %.6f\n", data.gyro_z);
+        mpu6050_read(&mpu6050_data);
+        ESP_LOGI("MPU6050 Read", "TEMP: %.6f", mpu6050_data.temperature);
+
+        ESP_LOGI("MPU6050 Read", "ROTATION X: %.6f", mpu6050_data.gyro_x);
+        ESP_LOGI("MPU6050 Read", "ROTATION Y: %.6f", mpu6050_data.gyro_y);
+        ESP_LOGI("MPU6050 Read", "ROTATION Z: %.6f\n", mpu6050_data.gyro_z);
+
+        ESP_LOGI("MPU6050 Read", "ACCEL X: %.6f", mpu6050_data.acc_x);
+        ESP_LOGI("MPU6050 Read", "ACCEL Y: %.6f", mpu6050_data.acc_y);
+        ESP_LOGI("MPU6050 Read", "ACCEL Z: %.6f\n", mpu6050_data.acc_z);
+
+        bmp280_read(&bmp280_data);
+        ESP_LOGI("BMP280 Read", "TEMP: %.6f", bmp280_data.temperature);
+        ESP_LOGI("BMP280 Read", "PRESSURE: %.6f", bmp280_data.pressure);
+        ESP_LOGI("BMP280 Read", "ALTITUDE: %.6f", bmp280_data.altitude);
+
         vTaskDelay(1000);
     }
     i2c_master_deinit();

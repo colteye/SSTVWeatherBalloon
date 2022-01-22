@@ -59,4 +59,4 @@
 // Also provides option to set a fixed number of iterations. If not achieved, abort.
 void ESP_ERROR_REDO_VALIDATE(const char *tag, esp_err_t (*func)(), uint16_t wait_ms, uint16_t timeout_iters);
 
-#endif /* _ERROR_HANDLING_H */
+#endif // _ERROR_HANDLING_H

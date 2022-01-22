@@ -25,6 +25,7 @@
 // ------------------------------------------------------------------------- //
 
 #include "sstv.h"
+#include "convert.h"
 #include "error_handling.h"
 
 // Start value to help generate sine wave oscillations.
@@ -122,7 +123,8 @@ esp_err_t sstv_camera_line(camera_fb_t *pic, uint16_t line, uint8_t color_channe
     for (uint16_t i = 0; i < pic->width * 2; i += 2)
     {
         // Go to correct pixel, convert to frequency and write to the buffer.
-        uint16_t pixel = ((uint16_t)pic->buf[l_idx + i] << 8) | pic->buf[l_idx + (i + 1)];
+
+        uint16_t pixel = U8S_2_U16(pic->buf[l_idx + i], pic->buf[l_idx + (i + 1)]);
         float freq = sstv_pixel_to_freq(pixel, color_channel);
         ESP_ERROR_VALIDATE("SSTV Camera Line",
                            err,

@@ -5,6 +5,7 @@
 #include <esp_system.h>
 #include "esp_camera.h"
 
+// Camera pins used for ESP Camera.
 #define CAM_PIN_PWDN 32
 #define CAM_PIN_RESET -1 //software reset will be performed
 #define CAM_PIN_XCLK 0
@@ -23,6 +24,7 @@
 #define CAM_PIN_HREF 23
 #define CAM_PIN_PCLK 22
 
+// Initialize camera.
 esp_err_t camera_init(void);
 
-#endif /* _CAMERA_H */
+#endif // _CAMERA_H
