@@ -25,9 +25,10 @@ esp_err_t camera_init()
         .pin_href = CAM_PIN_HREF,
         .pin_pclk = CAM_PIN_PCLK,
 
-        //XCLK 20MHz or 10MHz for OV2640 double FPS (Experimental)
-        // Set it to 10 MHz for now to avoid issues with timing
-        .xclk_freq_hz = 10000000,
+        // XCLK up to 20MHz for OV2640 double FPS (Experimental)
+        // Usually set to 10 MHz
+        // Set it to 15 MHz for now to avoid issues with timing
+        .xclk_freq_hz = 16000000,
         .ledc_timer = LEDC_TIMER_0,
         .ledc_channel = LEDC_CHANNEL_0,
 

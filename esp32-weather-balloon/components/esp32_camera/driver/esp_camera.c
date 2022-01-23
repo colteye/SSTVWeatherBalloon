@@ -55,7 +55,6 @@
 #include "gc0308.h"
 #endif
 
-
 #if defined(ARDUINO_ARCH_ESP32) && defined(CONFIG_ARDUHAL_ESP_LOG)
 #include "esp32-hal-log.h"
 #define TAG ""
@@ -64,7 +63,8 @@
 static const char *TAG = "camera";
 #endif
 
-typedef struct {
+typedef struct
+{
     sensor_t sensor;
     camera_fb_t fb;
 } camera_state_t;
@@ -81,7 +81,8 @@ static camera_state_t *s_state = NULL;
 #define CAMERA_DISABLE_OUT_CLOCK() camera_disable_out_clock()
 #endif
 
-typedef struct {
+typedef struct
+{
     int (*detect)(int slv_addr, sensor_id_t *id);
     int (*init)(sensor_t *sensor);
 } sensor_func_t;
@@ -119,28 +120,33 @@ static const sensor_func_t g_sensors[] = {
 static esp_err_t camera_probe(const camera_config_t *config, camera_model_t *out_camera_model)
 {
     *out_camera_model = CAMERA_NONE;
-    if (s_state != NULL) {
+    if (s_state != NULL)
+    {
         return ESP_ERR_INVALID_STATE;
     }
 
-    s_state = (camera_state_t *) calloc(sizeof(camera_state_t), 1);
-    if (!s_state) {
+    s_state = (camera_state_t *)calloc(sizeof(camera_state_t), 1);
+    if (!s_state)
+    {
         return ESP_ERR_NO_MEM;
     }
 
-    if (config->pin_xclk >= 0) {
+    if (config->pin_xclk >= 0)
+    {
         ESP_LOGD(TAG, "Enabling XCLK output");
         CAMERA_ENABLE_OUT_CLOCK(config);
     }
 
-    if (config->pin_sscb_sda != -1) {
+    if (config->pin_sscb_sda != -1)
+    {
         ESP_LOGD(TAG, "Initializing SSCB");
         SCCB_Init(config->pin_sscb_sda, config->pin_sscb_scl);
     }
 
-    if (config->pin_pwdn >= 0) {
+    if (config->pin_pwdn >= 0)
+    {
         ESP_LOGD(TAG, "Resetting camera by power down line");
-        gpio_config_t conf = { 0 };
+        gpio_config_t conf = {0};
         conf.pin_bit_mask = 1LL << config->pin_pwdn;
         conf.mode = GPIO_MODE_OUTPUT;
         gpio_config(&conf);
@@ -152,9 +158,10 @@ static esp_err_t camera_probe(const camera_config_t *config, camera_model_t *out
         vTaskDelay(10 / portTICK_PERIOD_MS);
     }
 
-    if (config->pin_reset >= 0) {
+    if (config->pin_reset >= 0)
+    {
         ESP_LOGD(TAG, "Resetting camera");
-        gpio_config_t conf = { 0 };
+        gpio_config_t conf = {0};
         conf.pin_bit_mask = 1LL << config->pin_reset;
         conf.mode = GPIO_MODE_OUTPUT;
         gpio_config(&conf);
@@ -165,13 +172,13 @@ static esp_err_t camera_probe(const camera_config_t *config, camera_model_t *out
         vTaskDelay(10 / portTICK_PERIOD_MS);
     }
 
-
     ESP_LOGD(TAG, "Searching for camera address");
     vTaskDelay(10 / portTICK_PERIOD_MS);
 
     uint8_t slv_addr = SCCB_Probe();
 
-    if (slv_addr == 0) {
+    if (slv_addr == 0)
+    {
         CAMERA_DISABLE_OUT_CLOCK();
         return ESP_ERR_NOT_FOUND;
     }
@@ -185,10 +192,13 @@ static esp_err_t camera_probe(const camera_config_t *config, camera_model_t *out
      * Attention: Some sensors have the same SCCB address. Therefore, several attempts may be made in the detection process
      */
     sensor_id_t *id = &s_state->sensor.id;
-    for (size_t i = 0; i < sizeof(g_sensors) / sizeof(sensor_func_t); i++) {
-        if (g_sensors[i].detect(slv_addr, id)) {
+    for (size_t i = 0; i < sizeof(g_sensors) / sizeof(sensor_func_t); i++)
+    {
+        if (g_sensors[i].detect(slv_addr, id))
+        {
             camera_sensor_info_t *info = esp_camera_sensor_get_info(id);
-            if (NULL != info) {
+            if (NULL != info)
+            {
                 *out_camera_model = info->model;
                 ESP_LOGI(TAG, "Detected %s camera", info->name);
                 g_sensors[i].init(&s_state->sensor);
@@ -197,7 +207,8 @@ static esp_err_t camera_probe(const camera_config_t *config, camera_model_t *out
         }
     }
 
-    if (CAMERA_NONE == *out_camera_model) { //If no supported sensors are detected
+    if (CAMERA_NONE == *out_camera_model)
+    { //If no supported sensors are detected
         CAMERA_DISABLE_OUT_CLOCK();
         ESP_LOGE(TAG, "Detected camera not supported.");
         return ESP_ERR_NOT_SUPPORTED;
@@ -217,34 +228,39 @@ esp_err_t esp_camera_init(const camera_config_t *config)
 {
     esp_err_t err;
     err = cam_init(config);
-    if (err != ESP_OK) {
+    if (err != ESP_OK)
+    {
         ESP_LOGE(TAG, "Camera init failed with error 0x%x", err);
         return err;
     }
 
     camera_model_t camera_model = CAMERA_NONE;
     err = camera_probe(config, &camera_model);
-    if (err != ESP_OK) {
+    if (err != ESP_OK)
+    {
         ESP_LOGE(TAG, "Camera probe failed with error 0x%x(%s)", err, esp_err_to_name(err));
         goto fail;
     }
 
-    framesize_t frame_size = (framesize_t) config->frame_size;
-    pixformat_t pix_format = (pixformat_t) config->pixel_format;
+    framesize_t frame_size = (framesize_t)config->frame_size;
+    pixformat_t pix_format = (pixformat_t)config->pixel_format;
 
-    if (PIXFORMAT_JPEG == pix_format && (!camera_sensor[camera_model].support_jpeg)) {
+    if (PIXFORMAT_JPEG == pix_format && (!camera_sensor[camera_model].support_jpeg))
+    {
         ESP_LOGE(TAG, "JPEG format is not supported on this sensor");
         err = ESP_ERR_NOT_SUPPORTED;
         goto fail;
     }
 
-    if (frame_size > camera_sensor[camera_model].max_size) {
+    if (frame_size > camera_sensor[camera_model].max_size)
+    {
         ESP_LOGW(TAG, "The frame size exceeds the maximum for this sensor, it will be forced to the maximum possible value");
         frame_size = camera_sensor[camera_model].max_size;
     }
 
     err = cam_config(config, frame_size, s_state->sensor.id.PID);
-    if (err != ESP_OK) {
+    if (err != ESP_OK)
+    {
         ESP_LOGE(TAG, "Camera config failed with error 0x%x", err);
         goto fail;
     }
@@ -252,21 +268,29 @@ esp_err_t esp_camera_init(const camera_config_t *config)
     s_state->sensor.status.framesize = frame_size;
     s_state->sensor.pixformat = pix_format;
     ESP_LOGD(TAG, "Setting frame size to %dx%d", resolution[frame_size].width, resolution[frame_size].height);
-    if (s_state->sensor.set_framesize(&s_state->sensor, frame_size) != 0) {
+    if (s_state->sensor.set_framesize(&s_state->sensor, frame_size) != 0)
+    {
         ESP_LOGE(TAG, "Failed to set frame size");
         err = ESP_ERR_CAMERA_FAILED_TO_SET_FRAME_SIZE;
         goto fail;
     }
     s_state->sensor.set_pixformat(&s_state->sensor, pix_format);
 
-    if (s_state->sensor.id.PID == OV2640_PID) {
+    if (s_state->sensor.id.PID == OV2640_PID)
+    {
         s_state->sensor.set_gainceiling(&s_state->sensor, GAINCEILING_2X);
         s_state->sensor.set_bpc(&s_state->sensor, false);
         s_state->sensor.set_wpc(&s_state->sensor, true);
         s_state->sensor.set_lenc(&s_state->sensor, true);
+
+        // Modifying exposure registers.
+        s_state->sensor.set_aec2(&s_state->sensor, true);
+        s_state->sensor.set_exposure_ctrl(&s_state->sensor, false);
+        s_state->sensor.set_aec_value(&s_state->sensor, 8);
     }
 
-    if (pix_format == PIXFORMAT_JPEG) {
+    if (pix_format == PIXFORMAT_JPEG)
+    {
         s_state->sensor.set_quality(&s_state->sensor, config->jpeg_quality);
     }
     s_state->sensor.init_status(&s_state->sensor);
@@ -284,7 +308,8 @@ esp_err_t esp_camera_deinit()
 {
     esp_err_t ret = cam_deinit();
     CAMERA_DISABLE_OUT_CLOCK();
-    if (s_state) {
+    if (s_state)
+    {
         SCCB_Deinit();
 
         free(s_state);
@@ -298,12 +323,14 @@ esp_err_t esp_camera_deinit()
 
 camera_fb_t *esp_camera_fb_get()
 {
-    if (s_state == NULL) {
+    if (s_state == NULL)
+    {
         return NULL;
     }
     camera_fb_t *fb = cam_take(FB_GET_TIMEOUT);
     //set the frame properties
-    if (fb) {
+    if (fb)
+    {
         fb->width = resolution[s_state->sensor.status.framesize].width;
         fb->height = resolution[s_state->sensor.status.framesize].height;
         fb->format = s_state->sensor.pixformat;
@@ -313,7 +340,8 @@ camera_fb_t *esp_camera_fb_get()
 
 void esp_camera_fb_return(camera_fb_t *fb)
 {
-    if (s_state == NULL) {
+    if (s_state == NULL)
+    {
         return;
     }
     cam_give(fb);
@@ -321,7 +349,8 @@ void esp_camera_fb_return(camera_fb_t *fb)
 
 sensor_t *esp_camera_sensor_get()
 {
-    if (s_state == NULL) {
+    if (s_state == NULL)
+    {
         return NULL;
     }
     return &s_state->sensor;
@@ -336,21 +365,28 @@ esp_err_t esp_camera_save_to_nvs(const char *key)
 #endif
     esp_err_t ret = nvs_open(key, NVS_READWRITE, &handle);
 
-    if (ret == ESP_OK) {
+    if (ret == ESP_OK)
+    {
         sensor_t *s = esp_camera_sensor_get();
-        if (s != NULL) {
+        if (s != NULL)
+        {
             ret = nvs_set_blob(handle, CAMERA_SENSOR_NVS_KEY, &s->status, sizeof(camera_status_t));
-            if (ret == ESP_OK) {
+            if (ret == ESP_OK)
+            {
                 uint8_t pf = s->pixformat;
                 ret = nvs_set_u8(handle, CAMERA_PIXFORMAT_NVS_KEY, pf);
             }
             return ret;
-        } else {
+        }
+        else
+        {
             return ESP_ERR_CAMERA_NOT_DETECTED;
         }
         nvs_close(handle);
         return ret;
-    } else {
+    }
+    else
+    {
         return ret;
     }
 }
@@ -366,13 +402,16 @@ esp_err_t esp_camera_load_from_nvs(const char *key)
 
     esp_err_t ret = nvs_open(key, NVS_READWRITE, &handle);
 
-    if (ret == ESP_OK) {
+    if (ret == ESP_OK)
+    {
         sensor_t *s = esp_camera_sensor_get();
         camera_status_t st;
-        if (s != NULL) {
+        if (s != NULL)
+        {
             size_t size = sizeof(camera_status_t);
             ret = nvs_get_blob(handle, CAMERA_SENSOR_NVS_KEY, &st, &size);
-            if (ret == ESP_OK) {
+            if (ret == ESP_OK)
+            {
                 s->set_ae_level(s, st.ae_level);
                 s->set_aec2(s, st.aec2);
                 s->set_aec_value(s, st.aec_value);
@@ -401,15 +440,20 @@ esp_err_t esp_camera_load_from_nvs(const char *key)
                 s->set_wpc(s, st.wpc);
             }
             ret = nvs_get_u8(handle, CAMERA_PIXFORMAT_NVS_KEY, &pf);
-            if (ret == ESP_OK) {
+            if (ret == ESP_OK)
+            {
                 s->set_pixformat(s, pf);
             }
-        } else {
+        }
+        else
+        {
             return ESP_ERR_CAMERA_NOT_DETECTED;
         }
         nvs_close(handle);
         return ret;
-    } else {
+    }
+    else
+    {
         ESP_LOGW(TAG, "Error (%d) opening nvs key \"%s\"", ret, key);
         return ret;
     }

@@ -40,7 +40,7 @@
 
 void app_main()
 {
-    i2c_master_init();
+    /*i2c_master_init();
     mpu6050_init();
     bmp280_init();
     bmp280_data_out_t bmp280_data;
@@ -66,7 +66,7 @@ void app_main()
         vTaskDelay(1000);
     }
     i2c_master_deinit();
-
+    */
     // Create task for taking SSTV pictures.
     xTaskCreate(SSTVCameraServiceTask, "SSTV Camera Service", 4096, NULL, tskIDLE_PRIORITY, NULL);
 }

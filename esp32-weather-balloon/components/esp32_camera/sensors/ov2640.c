@@ -21,14 +21,15 @@
 #include "esp32-hal-log.h"
 #else
 #include "esp_log.h"
-static const char* TAG = "ov2640";
+static const char *TAG = "ov2640";
 #endif
 
 static volatile ov2640_bank_t reg_bank = BANK_MAX;
 static int set_bank(sensor_t *sensor, ov2640_bank_t bank)
 {
     int res = 0;
-    if (bank != reg_bank) {
+    if (bank != reg_bank)
+    {
         reg_bank = bank;
         res = SCCB_Write(sensor->slv_addr, BANK_SEL, bank);
     }
@@ -37,14 +38,19 @@ static int set_bank(sensor_t *sensor, ov2640_bank_t bank)
 
 static int write_regs(sensor_t *sensor, const uint8_t (*regs)[2])
 {
-    int i=0, res = 0;
-    while (regs[i][0]) {
-        if (regs[i][0] == BANK_SEL) {
+    int i = 0, res = 0;
+    while (regs[i][0])
+    {
+        if (regs[i][0] == BANK_SEL)
+        {
             res = set_bank(sensor, regs[i][1]);
-        } else {
+        }
+        else
+        {
             res = SCCB_Write(sensor->slv_addr, regs[i][0], regs[i][1]);
         }
-        if (res) {
+        if (res)
+        {
             return res;
         }
         i++;
@@ -55,7 +61,8 @@ static int write_regs(sensor_t *sensor, const uint8_t (*regs)[2])
 static int write_reg(sensor_t *sensor, ov2640_bank_t bank, uint8_t reg, uint8_t value)
 {
     int ret = set_bank(sensor, bank);
-    if(!ret) {
+    if (!ret)
+    {
         ret = SCCB_Write(sensor->slv_addr, reg, value);
     }
     return ret;
@@ -67,7 +74,8 @@ static int set_reg_bits(sensor_t *sensor, uint8_t bank, uint8_t reg, uint8_t off
     uint8_t c_value, new_value;
 
     ret = set_bank(sensor, bank);
-    if(ret) {
+    if (ret)
+    {
         return ret;
     }
     c_value = SCCB_Read(sensor->slv_addr, reg);
@@ -78,7 +86,8 @@ static int set_reg_bits(sensor_t *sensor, uint8_t bank, uint8_t reg, uint8_t off
 
 static int read_reg(sensor_t *sensor, ov2640_bank_t bank, uint8_t reg)
 {
-    if(set_bank(sensor, bank)){
+    if (set_bank(sensor, bank))
+    {
         return 0;
     }
     return SCCB_Read(sensor->slv_addr, reg);
@@ -91,12 +100,27 @@ static uint8_t get_reg_bits(sensor_t *sensor, uint8_t bank, uint8_t reg, uint8_t
 
 static int write_reg_bits(sensor_t *sensor, uint8_t bank, uint8_t reg, uint8_t mask, int enable)
 {
-    return set_reg_bits(sensor, bank, reg, 0, mask, enable?mask:0);
+    return set_reg_bits(sensor, bank, reg, 0, mask, enable ? mask : 0);
 }
 
-#define WRITE_REGS_OR_RETURN(regs) ret = write_regs(sensor, regs); if(ret){return ret;}
-#define WRITE_REG_OR_RETURN(bank, reg, val) ret = write_reg(sensor, bank, reg, val); if(ret){return ret;}
-#define SET_REG_BITS_OR_RETURN(bank, reg, offset, mask, val) ret = set_reg_bits(sensor, bank, reg, offset, mask, val); if(ret){return ret;}
+#define WRITE_REGS_OR_RETURN(regs)  \
+    ret = write_regs(sensor, regs); \
+    if (ret)                        \
+    {                               \
+        return ret;                 \
+    }
+#define WRITE_REG_OR_RETURN(bank, reg, val)  \
+    ret = write_reg(sensor, bank, reg, val); \
+    if (ret)                                 \
+    {                                        \
+        return ret;                          \
+    }
+#define SET_REG_BITS_OR_RETURN(bank, reg, offset, mask, val)  \
+    ret = set_reg_bits(sensor, bank, reg, offset, mask, val); \
+    if (ret)                                                  \
+    {                                                         \
+        return ret;                                           \
+    }
 
 static int reset(sensor_t *sensor)
 {
@@ -111,7 +135,8 @@ static int set_pixformat(sensor_t *sensor, pixformat_t pixformat)
 {
     int ret = 0;
     sensor->pixformat = pixformat;
-    switch (pixformat) {
+    switch (pixformat)
+    {
     case PIXFORMAT_RGB565:
     case PIXFORMAT_RGB888:
         WRITE_REGS_OR_RETURN(ov2640_settings_rgb565);
@@ -127,16 +152,18 @@ static int set_pixformat(sensor_t *sensor, pixformat_t pixformat)
         ret = -1;
         break;
     }
-    if(!ret) {
+    if (!ret)
+    {
         vTaskDelay(10 / portTICK_PERIOD_MS);
     }
 
     return ret;
 }
 
-static int set_window(sensor_t *sensor, ov2640_sensor_mode_t mode, int offset_x, int offset_y, int max_x, int max_y, int w, int h){
+static int set_window(sensor_t *sensor, ov2640_sensor_mode_t mode, int offset_x, int offset_y, int max_x, int max_y, int w, int h)
+{
     int ret = 0;
-    const uint8_t (*regs)[2];
+    const uint8_t(*regs)[2];
     ov2640_clk_t c;
     c.reserved = 0;
 
@@ -154,22 +181,25 @@ static int set_window(sensor_t *sensor, ov2640_sensor_mode_t mode, int offset_x,
         {TEST, (max_x >> 2) & 0X80},
         {ZMOW, (w)&0xFF},
         {ZMOH, (h)&0xFF},
-        {ZMHH, ((h>>6)&0x04)|((w>>8)&0x03)},
-        {0, 0}
-    };
+        {ZMHH, ((h >> 6) & 0x04) | ((w >> 8) & 0x03)},
+        {0, 0}};
 
-    if (sensor->pixformat == PIXFORMAT_JPEG) {
+    if (sensor->pixformat == PIXFORMAT_JPEG)
+    {
         c.clk_2x = 0;
         c.clk_div = 0;
         c.pclk_auto = 0;
         c.pclk_div = 8;
-        if(mode == OV2640_MODE_UXGA) {
+        if (mode == OV2640_MODE_UXGA)
+        {
             c.pclk_div = 12;
         }
         // if (sensor->xclk_freq_hz == 16000000) {
         //     c.pclk_div = c.pclk_div / 2;
         // }
-    } else {
+    }
+    else
+    {
 #if CONFIG_IDF_TARGET_ESP32
         c.clk_2x = 0;
 #else
@@ -178,19 +208,27 @@ static int set_window(sensor_t *sensor, ov2640_sensor_mode_t mode, int offset_x,
         c.clk_div = 7;
         c.pclk_auto = 1;
         c.pclk_div = 8;
-        if (mode == OV2640_MODE_CIF) {
+        if (mode == OV2640_MODE_CIF)
+        {
             c.clk_div = 3;
-        } else if(mode == OV2640_MODE_UXGA) {
+        }
+        else if (mode == OV2640_MODE_UXGA)
+        {
             c.pclk_div = 12;
         }
     }
     ESP_LOGI(TAG, "Set PLL: clk_2x: %u, clk_div: %u, pclk_auto: %u, pclk_div: %u", c.clk_2x, c.clk_div, c.pclk_auto, c.pclk_div);
 
-    if (mode == OV2640_MODE_CIF) {
+    if (mode == OV2640_MODE_CIF)
+    {
         regs = ov2640_settings_to_cif;
-    } else if (mode == OV2640_MODE_SVGA) {
+    }
+    else if (mode == OV2640_MODE_SVGA)
+    {
         regs = ov2640_settings_to_svga;
-    } else {
+    }
+    else
+    {
         regs = ov2640_settings_to_uxga;
     }
 
@@ -222,18 +260,20 @@ static int set_framesize(sensor_t *sensor, framesize_t framesize)
 
     sensor->status.framesize = framesize;
 
-
-
-    if (framesize <= FRAMESIZE_CIF) {
+    if (framesize <= FRAMESIZE_CIF)
+    {
         mode = OV2640_MODE_CIF;
         max_x /= 4;
         max_y /= 4;
         offset_x /= 4;
         offset_y /= 4;
-        if(max_y > 296){
+        if (max_y > 296)
+        {
             max_y = 296;
         }
-    } else if (framesize <= FRAMESIZE_SVGA) {
+    }
+    else if (framesize <= FRAMESIZE_SVGA)
+    {
         mode = OV2640_MODE_SVGA;
         max_x /= 2;
         max_y /= 2;
@@ -247,13 +287,15 @@ static int set_framesize(sensor_t *sensor, framesize_t framesize)
 
 static int set_contrast(sensor_t *sensor, int level)
 {
-    int ret=0;
+    int ret = 0;
     level += 3;
-    if (level <= 0 || level > NUM_CONTRAST_LEVELS) {
+    if (level <= 0 || level > NUM_CONTRAST_LEVELS)
+    {
         return -1;
     }
-    sensor->status.contrast = level-3;
-    for (int i=0; i<7; i++) {
+    sensor->status.contrast = level - 3;
+    for (int i = 0; i < 7; i++)
+    {
         WRITE_REG_OR_RETURN(BANK_DSP, contrast_regs[0][i], contrast_regs[level][i]);
     }
     return ret;
@@ -261,13 +303,15 @@ static int set_contrast(sensor_t *sensor, int level)
 
 static int set_brightness(sensor_t *sensor, int level)
 {
-    int ret=0;
+    int ret = 0;
     level += 3;
-    if (level <= 0 || level > NUM_BRIGHTNESS_LEVELS) {
+    if (level <= 0 || level > NUM_BRIGHTNESS_LEVELS)
+    {
         return -1;
     }
-    sensor->status.brightness = level-3;
-    for (int i=0; i<5; i++) {
+    sensor->status.brightness = level - 3;
+    for (int i = 0; i < 5; i++)
+    {
         WRITE_REG_OR_RETURN(BANK_DSP, brightness_regs[0][i], brightness_regs[level][i]);
     }
     return ret;
@@ -275,13 +319,15 @@ static int set_brightness(sensor_t *sensor, int level)
 
 static int set_saturation(sensor_t *sensor, int level)
 {
-    int ret=0;
+    int ret = 0;
     level += 3;
-    if (level <= 0 || level > NUM_SATURATION_LEVELS) {
+    if (level <= 0 || level > NUM_SATURATION_LEVELS)
+    {
         return -1;
     }
-    sensor->status.saturation = level-3;
-    for (int i=0; i<5; i++) {
+    sensor->status.saturation = level - 3;
+    for (int i = 0; i < 5; i++)
+    {
         WRITE_REG_OR_RETURN(BANK_DSP, saturation_regs[0][i], saturation_regs[level][i]);
     }
     return ret;
@@ -289,13 +335,15 @@ static int set_saturation(sensor_t *sensor, int level)
 
 static int set_special_effect(sensor_t *sensor, int effect)
 {
-    int ret=0;
+    int ret = 0;
     effect++;
-    if (effect <= 0 || effect > NUM_SPECIAL_EFFECTS) {
+    if (effect <= 0 || effect > NUM_SPECIAL_EFFECTS)
+    {
         return -1;
     }
-    sensor->status.special_effect = effect-1;
-    for (int i=0; i<5; i++) {
+    sensor->status.special_effect = effect - 1;
+    for (int i = 0; i < 5; i++)
+    {
         WRITE_REG_OR_RETURN(BANK_DSP, special_effects_regs[0][i], special_effects_regs[effect][i]);
     }
     return ret;
@@ -303,14 +351,17 @@ static int set_special_effect(sensor_t *sensor, int effect)
 
 static int set_wb_mode(sensor_t *sensor, int mode)
 {
-    int ret=0;
-    if (mode < 0 || mode > NUM_WB_MODES) {
+    int ret = 0;
+    if (mode < 0 || mode > NUM_WB_MODES)
+    {
         return -1;
     }
     sensor->status.wb_mode = mode;
-    SET_REG_BITS_OR_RETURN(BANK_DSP, 0XC7, 6, 1, mode?1:0);
-    if(mode) {
-        for (int i=0; i<3; i++) {
+    SET_REG_BITS_OR_RETURN(BANK_DSP, 0XC7, 6, 1, mode ? 1 : 0);
+    if (mode)
+    {
+        for (int i = 0; i < 3; i++)
+        {
             WRITE_REG_OR_RETURN(BANK_DSP, wb_modes_regs[0][i], wb_modes_regs[mode][i]);
         }
     }
@@ -319,13 +370,15 @@ static int set_wb_mode(sensor_t *sensor, int mode)
 
 static int set_ae_level(sensor_t *sensor, int level)
 {
-    int ret=0;
+    int ret = 0;
     level += 3;
-    if (level <= 0 || level > NUM_AE_LEVELS) {
+    if (level <= 0 || level > NUM_AE_LEVELS)
+    {
         return -1;
     }
-    sensor->status.ae_level = level-3;
-    for (int i=0; i<3; i++) {
+    sensor->status.ae_level = level - 3;
+    for (int i = 0; i < 3; i++)
+    {
         WRITE_REG_OR_RETURN(BANK_SENSOR, ae_levels_regs[0][i], ae_levels_regs[level][i]);
     }
     return ret;
@@ -333,9 +386,12 @@ static int set_ae_level(sensor_t *sensor, int level)
 
 static int set_quality(sensor_t *sensor, int quality)
 {
-    if(quality < 0) {
+    if (quality < 0)
+    {
         quality = 0;
-    } else if(quality > 63) {
+    }
+    else if (quality > 63)
+    {
         quality = 63;
     }
     sensor->status.quality = quality;
@@ -344,9 +400,12 @@ static int set_quality(sensor_t *sensor, int quality)
 
 static int set_agc_gain(sensor_t *sensor, int gain)
 {
-    if(gain < 0) {
+    if (gain < 0)
+    {
         gain = 0;
-    } else if(gain > 30) {
+    }
+    else if (gain > 30)
+    {
         gain = 30;
     }
     sensor->status.agc_gain = gain;
@@ -362,112 +421,114 @@ static int set_gainceiling_sensor(sensor_t *sensor, gainceiling_t gainceiling)
 
 static int set_aec_value(sensor_t *sensor, int value)
 {
-    if(value < 0) {
+    if (value < 0)
+    {
         value = 0;
-    } else if(value > 1200) {
+    }
+    else if (value > 1200)
+    {
         value = 1200;
     }
     sensor->status.aec_value = value;
-    return set_reg_bits(sensor, BANK_SENSOR, REG04, 0, 3, value & 0x3)
-           || write_reg(sensor, BANK_SENSOR, AEC, (value >> 2) & 0xFF)
-           || set_reg_bits(sensor, BANK_SENSOR, REG45, 0, 0x3F, value >> 10);
+    return set_reg_bits(sensor, BANK_SENSOR, REG04, 0, 3, value & 0x3) || write_reg(sensor, BANK_SENSOR, AEC, (value >> 2) & 0xFF) || set_reg_bits(sensor, BANK_SENSOR, REG45, 0, 0x3F, value >> 10);
 }
 
 static int set_aec2(sensor_t *sensor, int enable)
 {
     sensor->status.aec2 = enable;
-    return set_reg_bits(sensor, BANK_DSP, CTRL0, 6, 1, enable?0:1);
+    return set_reg_bits(sensor, BANK_DSP, CTRL0, 6, 1, enable ? 0 : 1);
 }
 
 static int set_colorbar(sensor_t *sensor, int enable)
 {
     sensor->status.colorbar = enable;
-    return write_reg_bits(sensor, BANK_SENSOR, COM7, COM7_COLOR_BAR, enable?1:0);
+    return write_reg_bits(sensor, BANK_SENSOR, COM7, COM7_COLOR_BAR, enable ? 1 : 0);
 }
 
 static int set_agc_sensor(sensor_t *sensor, int enable)
 {
     sensor->status.agc = enable;
-    return write_reg_bits(sensor, BANK_SENSOR, COM8, COM8_AGC_EN, enable?1:0);
+    return write_reg_bits(sensor, BANK_SENSOR, COM8, COM8_AGC_EN, enable ? 1 : 0);
 }
 
 static int set_aec_sensor(sensor_t *sensor, int enable)
 {
     sensor->status.aec = enable;
-    return write_reg_bits(sensor, BANK_SENSOR, COM8, COM8_AEC_EN, enable?1:0);
+    return write_reg_bits(sensor, BANK_SENSOR, COM8, COM8_AEC_EN, enable ? 1 : 0);
 }
 
 static int set_hmirror_sensor(sensor_t *sensor, int enable)
 {
     sensor->status.hmirror = enable;
-    return write_reg_bits(sensor, BANK_SENSOR, REG04, REG04_HFLIP_IMG, enable?1:0);
+    return write_reg_bits(sensor, BANK_SENSOR, REG04, REG04_HFLIP_IMG, enable ? 1 : 0);
 }
 
 static int set_vflip_sensor(sensor_t *sensor, int enable)
 {
     int ret = 0;
     sensor->status.vflip = enable;
-    ret = write_reg_bits(sensor, BANK_SENSOR, REG04, REG04_VREF_EN, enable?1:0);
-    return ret & write_reg_bits(sensor, BANK_SENSOR, REG04, REG04_VFLIP_IMG, enable?1:0);
+    ret = write_reg_bits(sensor, BANK_SENSOR, REG04, REG04_VREF_EN, enable ? 1 : 0);
+    return ret & write_reg_bits(sensor, BANK_SENSOR, REG04, REG04_VFLIP_IMG, enable ? 1 : 0);
 }
 
 static int set_raw_gma_dsp(sensor_t *sensor, int enable)
 {
     sensor->status.raw_gma = enable;
-    return set_reg_bits(sensor, BANK_DSP, CTRL1, 5, 1, enable?1:0);
+    return set_reg_bits(sensor, BANK_DSP, CTRL1, 5, 1, enable ? 1 : 0);
 }
 
 static int set_awb_dsp(sensor_t *sensor, int enable)
 {
     sensor->status.awb = enable;
-    return set_reg_bits(sensor, BANK_DSP, CTRL1, 3, 1, enable?1:0);
+    return set_reg_bits(sensor, BANK_DSP, CTRL1, 3, 1, enable ? 1 : 0);
 }
 
 static int set_awb_gain_dsp(sensor_t *sensor, int enable)
 {
     sensor->status.awb_gain = enable;
-    return set_reg_bits(sensor, BANK_DSP, CTRL1, 2, 1, enable?1:0);
+    return set_reg_bits(sensor, BANK_DSP, CTRL1, 2, 1, enable ? 1 : 0);
 }
 
 static int set_lenc_dsp(sensor_t *sensor, int enable)
 {
     sensor->status.lenc = enable;
-    return set_reg_bits(sensor, BANK_DSP, CTRL1, 1, 1, enable?1:0);
+    return set_reg_bits(sensor, BANK_DSP, CTRL1, 1, 1, enable ? 1 : 0);
 }
 
 static int set_dcw_dsp(sensor_t *sensor, int enable)
 {
     sensor->status.dcw = enable;
-    return set_reg_bits(sensor, BANK_DSP, CTRL2, 5, 1, enable?1:0);
+    return set_reg_bits(sensor, BANK_DSP, CTRL2, 5, 1, enable ? 1 : 0);
 }
 
 static int set_bpc_dsp(sensor_t *sensor, int enable)
 {
     sensor->status.bpc = enable;
-    return set_reg_bits(sensor, BANK_DSP, CTRL3, 7, 1, enable?1:0);
+    return set_reg_bits(sensor, BANK_DSP, CTRL3, 7, 1, enable ? 1 : 0);
 }
 
 static int set_wpc_dsp(sensor_t *sensor, int enable)
 {
     sensor->status.wpc = enable;
-    return set_reg_bits(sensor, BANK_DSP, CTRL3, 6, 1, enable?1:0);
+    return set_reg_bits(sensor, BANK_DSP, CTRL3, 6, 1, enable ? 1 : 0);
 }
 
 //unsupported
 static int set_sharpness(sensor_t *sensor, int level)
 {
-   return -1;
+    return -1;
 }
 
 static int set_denoise(sensor_t *sensor, int level)
 {
-   return -1;
+    return -1;
 }
 
 static int get_reg(sensor_t *sensor, int reg, int mask)
 {
     int ret = read_reg(sensor, (reg >> 8) & 0x01, reg & 0xFF);
-    if(ret > 0){
+    if (ret > 0)
+    {
         ret &= mask;
     }
     return ret;
@@ -477,7 +538,8 @@ static int set_reg(sensor_t *sensor, int reg, int mask, int value)
 {
     int ret = 0;
     ret = read_reg(sensor, (reg >> 8) & 0x01, reg & 0xFF);
-    if(ret < 0){
+    if (ret < 0)
+    {
         return ret;
     }
     value = (ret & ~mask) | (value & mask);
@@ -503,7 +565,8 @@ static int set_xclk(sensor_t *sensor, int timer, int xclk)
     return ret;
 }
 
-static int init_status(sensor_t *sensor){
+static int init_status(sensor_t *sensor)
+{
     sensor->status.brightness = 0;
     sensor->status.contrast = 0;
     sensor->status.saturation = 0;
@@ -513,16 +576,16 @@ static int init_status(sensor_t *sensor){
 
     sensor->status.agc_gain = 30;
     int agc_gain = read_reg(sensor, BANK_SENSOR, GAIN);
-    for (int i=0; i<30; i++){
-        if(agc_gain >= agc_gain_tbl[i] && agc_gain < agc_gain_tbl[i+1]){
+    for (int i = 0; i < 30; i++)
+    {
+        if (agc_gain >= agc_gain_tbl[i] && agc_gain < agc_gain_tbl[i + 1])
+        {
             sensor->status.agc_gain = i;
             break;
         }
     }
 
-    sensor->status.aec_value = ((uint16_t)get_reg_bits(sensor, BANK_SENSOR, REG45, 0, 0x3F) << 10)
-                             | ((uint16_t)read_reg(sensor, BANK_SENSOR, AEC) << 2)
-                             | get_reg_bits(sensor, BANK_SENSOR, REG04, 0, 3);//0 - 1200
+    sensor->status.aec_value = ((uint16_t)get_reg_bits(sensor, BANK_SENSOR, REG45, 0, 0x3F) << 10) | ((uint16_t)read_reg(sensor, BANK_SENSOR, AEC) << 2) | get_reg_bits(sensor, BANK_SENSOR, REG04, 0, 3); //0 - 1200
     sensor->status.quality = read_reg(sensor, BANK_DSP, QS);
     sensor->status.gainceiling = get_reg_bits(sensor, BANK_SENSOR, COM9, 5, 7);
 
@@ -540,23 +603,27 @@ static int init_status(sensor_t *sensor){
     sensor->status.dcw = get_reg_bits(sensor, BANK_DSP, CTRL2, 5, 1);
     sensor->status.colorbar = get_reg_bits(sensor, BANK_SENSOR, COM7, 1, 1);
 
-    sensor->status.sharpness = 0;//not supported
+    sensor->status.sharpness = 0; //not supported
     sensor->status.denoise = 0;
     return 0;
 }
 
 int ov2640_detect(int slv_addr, sensor_id_t *id)
 {
-    if (OV2640_SCCB_ADDR == slv_addr) {
-        SCCB_Write(slv_addr, 0xFF, 0x01);//bank sensor
+    if (OV2640_SCCB_ADDR == slv_addr)
+    {
+        SCCB_Write(slv_addr, 0xFF, 0x01); //bank sensor
         uint16_t PID = SCCB_Read(slv_addr, 0x0A);
-        if (OV2640_PID == PID) {
+        if (OV2640_PID == PID)
+        {
             id->PID = PID;
             id->VER = SCCB_Read(slv_addr, REG_VER);
             id->MIDL = SCCB_Read(slv_addr, REG_MIDL);
             id->MIDH = SCCB_Read(slv_addr, REG_MIDH);
             return PID;
-        } else {
+        }
+        else
+        {
             ESP_LOGI(TAG, "Mismatch PID=0x%x", PID);
         }
     }
@@ -569,9 +636,9 @@ int ov2640_init(sensor_t *sensor)
     sensor->init_status = init_status;
     sensor->set_pixformat = set_pixformat;
     sensor->set_framesize = set_framesize;
-    sensor->set_contrast  = set_contrast;
-    sensor->set_brightness= set_brightness;
-    sensor->set_saturation= set_saturation;
+    sensor->set_contrast = set_contrast;
+    sensor->set_brightness = set_brightness;
+    sensor->set_saturation = set_saturation;
 
     sensor->set_quality = set_quality;
     sensor->set_colorbar = set_colorbar;
@@ -607,6 +674,8 @@ int ov2640_init(sensor_t *sensor)
     sensor->set_res_raw = set_res_raw;
     sensor->set_pll = _set_pll;
     sensor->set_xclk = set_xclk;
+
+    //set_shutter_divider(sensor, 0);
     ESP_LOGD(TAG, "OV2640 Attached");
     return 0;
 }
