@@ -1,6 +1,25 @@
 #include "camera.h"
 #include "error_handling.h"
 
+// Camera pins used for ESP Camera.
+#define CAM_PIN_PWDN 32
+#define CAM_PIN_RESET -1 //software reset will be performed
+#define CAM_PIN_XCLK 0
+#define CAM_PIN_SIOD 26
+#define CAM_PIN_SIOC 27
+
+#define CAM_PIN_D7 35
+#define CAM_PIN_D6 34
+#define CAM_PIN_D5 39
+#define CAM_PIN_D4 36
+#define CAM_PIN_D3 21
+#define CAM_PIN_D2 19
+#define CAM_PIN_D1 18
+#define CAM_PIN_D0 5
+#define CAM_PIN_VSYNC 25
+#define CAM_PIN_HREF 23
+#define CAM_PIN_PCLK 22
+
 esp_err_t camera_init()
 {
     // Init error.
@@ -46,4 +65,14 @@ esp_err_t camera_init()
 
     ESP_LOGI("Camera Configuration", "Camera initialized successfully!");
     return ESP_OK;
+}
+
+void camera_read(camera_fb_t *pic)
+{
+    ESP_LOGI(TAG, "Taking picture...");
+    pic = esp_camera_fb_get();
+
+    // use pic->buf to access the image.
+    ESP_LOGI(TAG, "Picture taken! Its size was: %zu bytes", pic->len);
+    esp_camera_fb_return(pic);
 }

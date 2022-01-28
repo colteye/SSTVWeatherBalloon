@@ -4,3 +4,9 @@ cmake_minimum_required(VERSION 3.5)
 
 include($ENV{IDF_PATH}/tools/cmake/project.cmake)
 project(esp32-weather-balloon)
+
+# Set extra component directories to organize code better
+set(EXTRA_COMPONENT_DIRS components/ 
+						 components/sensors
+						 components/radio
+						 components/sensors/camera)

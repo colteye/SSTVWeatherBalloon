@@ -25,15 +25,80 @@
 // ------------------------------------------------------------------------- //
 
 #include "sstv.h"
+#include "sstv_luts.h"
+#include "camera.h"
+
+#include <complex.h>
+#include <math.h>
+
 #include "convert.h"
 #include "error_handling.h"
 
+#include "driver/timer.h"
+
+#include "freertos/FreeRTOS.h"
+#include "freertos/queue.h"
+#include "freertos/task.h"
+
+// Check range of a value between 2 values
+#define IN_RANGE(low, high, x) (low <= x && x <= high)
+
+// Pick color channel for SSTV scanlines
+#define RED (0)
+#define GREEN (1)
+#define BLUE (2)
+
+// Output buffer data
+uint8_t *WAVEFORM_BUFFER;
+#define BITS_LEN (SAMPLE_RATE * CLIP_LENGTH * BITS_PER_SAMPLE)
+#define WAVEFORM_BUFFER_LEN (BITS_LEN / BYTE_SIZE)
+
+// SSTV waveform related defines
+#define BYTE_SIZE (8)
+#define CLIP_LENGTH (110) // in seconds
+#define BITS_PER_SAMPLE (2)
+#define SAMPLE_RATE (40000)
+#define WAVEFORM_GPIO (GPIO_NUM_2)
+
+#define SSTV_NUM_PWM_LEVELS (BITS_PER_SAMPLE + 1)
+#define SSTV_SINE_MIN (-0.25f)
+#define SSTV_SINE_MAX (0.25f)
+#define SSTV_PWM_RANGE_ADDR (SSTV_SINE_MAX - SSTV_SINE_MIN) / (float)SSTV_NUM_PWM_LEVELS
+
+// Final image size should be 320 x 256.
+#define CALLSIGN_HEIGHT (16)
+
+#define SSTV_TIMER_DIVIDER (APB_CLK_FREQ / (SAMPLE_RATE * BITS_PER_SAMPLE)) //Subtract to try to compensate for extra operations being done?
+#define SSTV_WAVEFORM_TIMER (1)                                             // done with auto reload
+
+// Scottie 1 SSTV defines
+#define SSTV_SCOTTIE_1_VIS_CODE (60)
+#define SSTV_SCOTTIE_1_PULSE_MS (9.0f)
+#define SSTV_SCOTTIE_1_PORCH_MS (1.5f)
+#define SSTV_SCOTTIE_1_SEPARATOR_MS (1.5f)
+#define SSTV_SCOTTIE_1_SCAN_MS (0.4320f)
+
+// These are just to avoid confusion about the values
+#define SSTV_300MS (300.0f)
+#define SSTV_100MS (100.0f)
+#define SSTV_10MS (10.0f)
+#define SSTV_30MS (30.0f)
+
+#define SSTV_1100HZ (1100.0f)
+#define SSTV_1200HZ (1200.0f)
+#define SSTV_1300HZ (1300.0f)
+#define SSTV_1500HZ (1500.0f)
+#define SSTV_1900HZ (1900.0f)
+#define SSTV_2300HZ (2300.0f)
+
 // Start value to help generate sine wave oscillations.
-float complex output_osc = 0.25;
+float complex waveform_osc = 0.25;
 
-// Used to keep track of output bit while transmitting.
-uint32_t current_output_bit = 0xFFFFFFFF;
+// Used to keep track of waveform bit while transmitting.
+uint32_t current_waveform_bit = 0xFFFFFFFF;
 
+// Write a frequency for a specific number of time into the SSTV buffer as PWM.
+// Uses code from https://github.com/brainwagon/sstv-encoders/blob/master/martin.c
 esp_err_t write_pulse(float freq, float ms, uint32_t *offset)
 {
     // Convert ms to samples.
@@ -49,8 +114,8 @@ esp_err_t write_pulse(float freq, float ms, uint32_t *offset)
 
     for (uint32_t i = 0; i < nsamp_bits; i += BITS_PER_SAMPLE)
     {
-        output_osc *= m;
-        float r = crealf(output_osc);
+        waveform_osc *= m;
+        float r = crealf(waveform_osc);
 
         // Convert continuous sine wave into PWM signals.
         float min = SSTV_SINE_MIN;
@@ -66,7 +131,7 @@ esp_err_t write_pulse(float freq, float ms, uint32_t *offset)
                 // j tells us how many bits will be 1.
                 for (uint8_t k = 0; k < j; ++k)
                 {
-                    OUTPUT_BUFFER[byte_idx] |= 1UL << (bit_idx + k);
+                    WAVEFORM_BUFFER[byte_idx] |= 1UL << (bit_idx + k);
                 }
 
                 // Break because we found the right range.
@@ -86,6 +151,7 @@ esp_err_t write_pulse(float freq, float ms, uint32_t *offset)
     return ESP_OK;
 }
 
+// Convert pixel from specific color channel into a frequency.
 float sstv_pixel_to_freq(uint16_t pixel, uint8_t color_channel)
 {
     // Init frequency float.
@@ -111,6 +177,7 @@ float sstv_pixel_to_freq(uint16_t pixel, uint8_t color_channel)
     return freq;
 }
 
+// Generate SSTV waveform for a single line of the camera.
 esp_err_t sstv_camera_line(camera_fb_t *pic, uint16_t line, uint8_t color_channel, uint32_t *offset)
 {
     // Init error.
@@ -133,6 +200,7 @@ esp_err_t sstv_camera_line(camera_fb_t *pic, uint16_t line, uint8_t color_channe
     return ESP_OK;
 }
 
+// Generate SSTV waveform for a single line of the callsign.
 esp_err_t sstv_callsign_line(uint16_t pic_width, uint16_t line, uint8_t color_channel, uint32_t *offset)
 {
     // Init error.
@@ -153,7 +221,8 @@ esp_err_t sstv_callsign_line(uint16_t pic_width, uint16_t line, uint8_t color_ch
     return ESP_OK;
 }
 
-esp_err_t sstv_generate_output(camera_fb_t *pic)
+// Generate SSTV waveform of entire image.
+esp_err_t sstv_generate_waveform(camera_fb_t *pic)
 {
     // Init error.
     esp_err_t err = ESP_OK;
@@ -315,7 +384,7 @@ esp_err_t sstv_generate_output(camera_fb_t *pic)
 
 // Timer interrupt for SSTV transmission.
 // If interrupt is during transmission, play current transmission bit.
-void IRAM_ATTR sstv_transmit_output_isr(void *para)
+void IRAM_ATTR sstv_transmit_waveform_isr(void *para)
 {
     int timer_idx = (int)para;
 
@@ -329,18 +398,18 @@ void IRAM_ATTR sstv_transmit_output_isr(void *para)
     {
         // If fully transmitted, just consume interrupt.
         // Otherwise, play correct bit.
-        if (current_output_bit < (SAMPLE_RATE * CLIP_LENGTH * BITS_PER_SAMPLE))
+        if (current_waveform_bit < (SAMPLE_RATE * CLIP_LENGTH * BITS_PER_SAMPLE))
         {
             // Convert transmission bit into gpio level.
-            uint32_t byte_idx = current_output_bit / BYTE_SIZE;
-            uint8_t bit_idx = current_output_bit % BYTE_SIZE;
-            uint8_t level = (OUTPUT_BUFFER[byte_idx] & BIT(bit_idx)) > 0;
+            uint32_t byte_idx = current_waveform_bit / BYTE_SIZE;
+            uint8_t bit_idx = current_waveform_bit % BYTE_SIZE;
+            uint8_t level = (WAVEFORM_BUFFER[byte_idx] & BIT(bit_idx)) > 0;
 
             // Don't error check.
             //Even if it fails, it's worth to just continue as each interrupt is so short.
-            gpio_set_level(OUTPUT_GPIO, level);
+            gpio_set_level(WAVEFORM_GPIO, level);
 
-            ++current_output_bit;
+            ++current_waveform_bit;
         }
 
         TIMERG0.int_clr_timers.t1 = 1;
@@ -351,6 +420,7 @@ void IRAM_ATTR sstv_transmit_output_isr(void *para)
     TIMERG0.hw_timer[timer_idx].config.alarm_en = TIMER_ALARM_EN;
 }
 
+// Initialize timer with SSTV options.
 esp_err_t sstv_timer_init(void)
 {
     // Init error.
@@ -366,35 +436,36 @@ esp_err_t sstv_timer_init(void)
     }; // default clock source is APB
     ESP_ERROR_VALIDATE("SSTV Initialize Timer",
                        err,
-                       timer_init(TIMER_GROUP_0, SSTV_OUTPUT_TIMER, &config))
+                       timer_init(TIMER_GROUP_0, SSTV_WAVEFORM_TIMER, &config))
 
     // Timer's counter will initially start from value below.
     // Also, if auto_reload is set, this value will be automatically reload on alarm.
     ESP_ERROR_VALIDATE("SSTV Timer Counter",
                        err,
-                       timer_set_counter_value(TIMER_GROUP_0, SSTV_OUTPUT_TIMER, 0))
+                       timer_set_counter_value(TIMER_GROUP_0, SSTV_WAVEFORM_TIMER, 0))
 
     // Configure the alarm value and the interrupt on alarm.
     ESP_ERROR_VALIDATE("SSTV Alarm Value",
                        err,
-                       timer_set_alarm_value(TIMER_GROUP_0, SSTV_OUTPUT_TIMER, 1))
+                       timer_set_alarm_value(TIMER_GROUP_0, SSTV_WAVEFORM_TIMER, 1))
 
     ESP_ERROR_VALIDATE("SSTV Enable Interrupt",
                        err,
-                       timer_enable_intr(TIMER_GROUP_0, SSTV_OUTPUT_TIMER))
+                       timer_enable_intr(TIMER_GROUP_0, SSTV_WAVEFORM_TIMER))
 
     ESP_ERROR_VALIDATE("SSTV Register Interrupt",
                        err,
-                       timer_isr_register(TIMER_GROUP_0, SSTV_OUTPUT_TIMER, sstv_transmit_output_isr, (void *)SSTV_OUTPUT_TIMER, ESP_INTR_FLAG_IRAM, NULL))
+                       timer_isr_register(TIMER_GROUP_0, SSTV_WAVEFORM_TIMER, sstv_transmit_waveform_isr, (void *)SSTV_WAVEFORM_TIMER, ESP_INTR_FLAG_IRAM, NULL))
 
     // Start timer from initialization.
     ESP_ERROR_VALIDATE("SSTV Start Timer",
                        err,
-                       timer_start(TIMER_GROUP_0, SSTV_OUTPUT_TIMER))
+                       timer_start(TIMER_GROUP_0, SSTV_WAVEFORM_TIMER))
 
     return ESP_OK;
 }
 
+// Initialize GPIO and Timer for SSTV.
 esp_err_t sstv_init(void)
 {
     // Init error.
@@ -402,8 +473,8 @@ esp_err_t sstv_init(void)
 
     // GPIO configuration for transmission pin.
     gpio_config_t io_conf = {
-        .pin_bit_mask = BIT(OUTPUT_GPIO),
-        .mode = GPIO_MODE_OUTPUT,
+        .pin_bit_mask = BIT(WAVEFORM_GPIO),
+        .mode = GPIO_MODE_WAVEFORM,
         .pull_up_en = GPIO_PULLUP_DISABLE,
         .pull_down_en = GPIO_PULLDOWN_DISABLE,
         .intr_type = GPIO_PIN_INTR_DISABLE,
@@ -415,7 +486,7 @@ esp_err_t sstv_init(void)
                        gpio_config(&io_conf))
     ESP_ERROR_VALIDATE("SSTV Set GPIO Direction",
                        err,
-                       gpio_set_direction(OUTPUT_GPIO, GPIO_MODE_OUTPUT))
+                       gpio_set_direction(WAVEFORM_GPIO, GPIO_MODE_WAVEFORM))
 
     // Initialize SSTVE timer.
     ESP_ERROR_VALIDATE("SSTV Initialize Timer",
@@ -425,24 +496,26 @@ esp_err_t sstv_init(void)
     return ESP_OK;
 }
 
+// Initialize SSTV waveform buffer.
 esp_err_t sstv_buffer_init(void)
 {
     // Use calloc to start everything at 0.
-    OUTPUT_BUFFER = (uint8_t *)calloc(OUTPUT_BUFFER_LEN, sizeof(uint8_t));
-    if (!OUTPUT_BUFFER)
+    WAVEFORM_BUFFER = (uint8_t *)calloc(WAVEFORM_BUFFER_LEN, sizeof(uint8_t));
+    if (!WAVEFORM_BUFFER)
     {
         return ESP_ERR_NO_MEM;
     }
     return ESP_OK;
 }
 
+// Clear SSTV waveform buffer.
 void sstv_buffer_clear(void)
 {
     // Free buffer pointer.
-    free(OUTPUT_BUFFER);
+    free(WAVEFORM_BUFFER);
 }
 
-void SSTVCameraServiceTask(void *pvParameters)
+void sstv_task_entry(void *arg)
 {
     // Init error.
     esp_err_t err = ESP_OK;
@@ -463,23 +536,20 @@ void SSTVCameraServiceTask(void *pvParameters)
         // Create buffer.
         ESP_ERROR_CONTINUE_VALIDATE("SSTV Buffer Initialize", err, 1000, sstv_buffer_init())
 
-        ESP_LOGI(TAG, "Taking picture...");
-        camera_fb_t *pic = esp_camera_fb_get();
-
-        // use pic->buf to access the image.
-        ESP_LOGI(TAG, "Picture taken! Its size was: %zu bytes", pic->len);
-        esp_camera_fb_return(pic);
+        // Take a picture!
+        camera_fb_t *pic;
+        camera_read(pic);
 
         ESP_LOGI(TAG, "Processing picture with SCOTTIE 1 SSTV...");
 
         // Generate wave data.
-        ESP_ERROR_CONTINUE_VALIDATE("SSTV Generate Waveform", err, 1000, sstv_generate_output(pic))
+        ESP_ERROR_CONTINUE_VALIDATE("SSTV Generate Waveform", err, 1000, sstv_generate_waveform(pic))
 
         ESP_LOGI(TAG, "Finished Processing!");
         ESP_LOGI(TAG, "Transmitting SSTV signal...");
 
-        // Start the timer to output data.
-        current_output_bit = 0;
+        // Start the timer to waveform data.
+        current_waveform_bit = 0;
 
         // Delay while timer writes transmission to GPIO.
         vTaskDelay(CLIP_LENGTH * 1000 / portTICK_PERIOD_MS);
