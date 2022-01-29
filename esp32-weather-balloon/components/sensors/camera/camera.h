@@ -8,6 +8,4 @@
 // Initialize camera.
 esp_err_t camera_init(void);
 
-void camera_read(camera_fb_t *pic);
-
 #endif // _CAMERA_H

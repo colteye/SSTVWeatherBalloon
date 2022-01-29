@@ -27,13 +27,15 @@
 #ifndef _SSTV_H
 #define _SSTV_H
 
+#include "camera.h"
+#include "radio_transmitter.h"
 #include "esp32/rom/ets_sys.h"
 
 // NOTE: FREERTOS timing needs to be set to 1000hz!
 // This allows us to use vTaskDelay and still keep our watchdog timer
 // Dont need to divide vTaskDelay by anything, as 1 tick = 1 ms
 
-// Task which repeatedly takes pictures and transmits them via SSTV.
-void sstv_task_entry(void *arg);
+// Generate SSTV waveform from image!
+esp_err_t sstv_generate_waveform(camera_fb_t *pic, radio_waveform_data_t *sstv_buf);
 
 #endif // _SSTV_H

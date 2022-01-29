@@ -24,31 +24,33 @@
 // SSTV Protocol: Scottie 1                                                   //
 // -------------------------------------------------------------------------- //
 
-#ifndef _RADIO_BASE_H
-#define _RADIO_BASE_H
+#ifndef _RADIO_TRANSMITTER_H
+#define _RADIO_TRANSMITTER_H
 
-#include "esp32/rom/ets_sys.h"
+#include <esp_system.h>
 #include <complex.h>
 #include <math.h>
 
+#include "freertos/FreeRTOS.h"
+#include "freertos/semphr.h"
+#include "freertos/task.h"
+#include "freertos/queue.h"
+
 #define BYTE_SIZE (8)
+
 #define SINE_MIN (-0.25f)
 #define SINE_MAX (0.25f)
 
-#define WAVEFORM_TIMER (1)
-#define WAVEFORM_GPIO (GPIO_NUM_2)
-
-// Data collected by BMP280.
 typedef struct
 {
     float pwm_range_addr;    // Sine oscillation range for PWM levels.
     uint8_t num_pwm_levels;  // Number of  PWM levels for generating signals.
     uint8_t bits_per_sample; // Number of bits in a single samples.
     uint16_t sample_rate;    // Sample rate (samples/second).
-    uint8_t timer;           // Timer index.
+    int timer;               // Timer index.
     uint32_t timer_divider;  // Timer divider for radio timer initialization.
     uint8_t gpio;            // GPIO pin for radio output.
-} radio_config_t;
+} radio_transmitter_config_t;
 
 typedef struct
 {
@@ -59,19 +61,16 @@ typedef struct
     uint8_t clip_seconds;     // Number of seconds in the buffer.
     uint32_t buffer_bits_len; // Number of bits in the buffer.
     uint8_t *buffer;          // Waveform buffer.
-    uint8_t gpio;             // GPIO pin for radio output.
 } radio_waveform_data_t;
 
-esp_err_t radio_init(radio_state_t *radio_state);
-esp_err_t radio_timer_init(radio_state_t *radio_state);
-
-void radio_transmit(radio_state_t *radio_state);
-
-esp_err_t radio_waveform_buffer_init(radio_state_t *radio_state);
-esp_err_t radio_waveform_buffer_deinit(radio_state_t *radio_state);
+radio_transmitter_config_t *radio_transmitter_get_config(void);
+xSemaphoreHandle radio_transmitter_get_mutex(void);
+xQueueHandle radio_transmitter_get_waveform_queue(void);
 
 // Write a frequency for a specific number of time into the SSTV buffer as PWM.
 // Uses code from https://github.com/brainwagon/sstv-encoders/blob/master/martin.c
-esp_err_t write_pulse(float freq, float ms, radio_state_t *radio_state);
+esp_err_t radio_transmitter_write_pulse(float freq, float ms, radio_waveform_data_t *waveform);
 
-#endif // _RADIO_BASE_H
+esp_err_t radio_transmitter_init(radio_transmitter_config_t radio_config);
+
+#endif // _RADIO_TRANSMITTER_H

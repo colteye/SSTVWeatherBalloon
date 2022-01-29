@@ -1,5 +1,5 @@
 idf_component_register(
-    SRCS "gps.c" "nmea_parser.c"
+    SRCS "radio_transmitter.c"
     INCLUDE_DIRS .
     REQUIRES error_handling
 )

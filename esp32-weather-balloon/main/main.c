@@ -33,15 +33,11 @@
 #include "freertos/task.h"
 #include "freertos/queue.h"
 
-#include "gps.h"
-#include "sstv.h"
-#include "bmp280.h"
-#include "mpu6050.h"
-#include "sensor_i2c.h"
+#include "data_manager.h"
 
 void app_main()
 {
-    // Initialize I2C for the BMP250 and MPU6050.
+    /*// Initialize I2C for the BMP250 and MPU6050.
     i2c_master_init();
 
     gps_init();
@@ -78,5 +74,7 @@ void app_main()
     i2c_master_deinit();
 
     // Create task for taking SSTV pictures.
-    xTaskCreate(SSTVCameraServiceTask, "SSTV Camera Service", 4096, NULL, tskIDLE_PRIORITY, NULL);
+    xTaskCreate(SSTVCameraServiceTask, "SSTV Camera Service", 4096, NULL, tskIDLE_PRIORITY, NULL);*/
+
+    data_manager_init();
 }

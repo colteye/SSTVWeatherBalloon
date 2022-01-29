@@ -1,21 +1,18 @@
 #include "radio_transmitter.h"
-#include "camera.h"
-
-#include "convert.h"
 #include "error_handling.h"
 
+#include "driver/gpio.h"
 #include "driver/timer.h"
 
-#include "freertos/FreeRTOS.h"
-#include "freertos/queue.h"
-#include "freertos/task.h"
+#define RADIO_TRANSMITTER_STACK_SIZE (4096)
+#define RADIO_TRANSMITTER_TAG ("Radio Transmitter")
 
 typedef struct
 {
-    radio_config_t config;
+    radio_transmitter_config_t config;
     radio_waveform_data_t waveform;
-    QueueHandle_t waveform_queue; // Radio waveform queue handle
-    SemaphoreHandle_t radio_busy_mutex;
+    xQueueHandle waveform_queue; // Radio waveform queue handle
+    xSemaphoreHandle radio_busy_mutex;
 
 } radio_state_t;
 
@@ -24,13 +21,53 @@ static radio_state_t *radio_state = NULL;
 // Check range of a value between 2 values
 #define IN_RANGE(low, high, x) (low <= x && x <= high)
 
+radio_transmitter_config_t *radio_transmitter_get_config(void)
+{
+    return &radio_state->config;
+}
+
+xSemaphoreHandle radio_transmitter_get_mutex(void)
+{
+    return radio_state->radio_busy_mutex;
+}
+
+xQueueHandle radio_transmitter_get_waveform_queue(void)
+{
+    return radio_state->waveform_queue;
+}
+
+void radio_transmitter_transmit(void)
+{
+    radio_state->waveform.current_transmit_bit = 0;
+}
+
+static void radio_transmitter_task_entry(void *arg)
+{
+    radio_waveform_data_t current_waveform;
+    for (;;)
+    {
+        if (xQueueReceive(radio_state->waveform_queue, &current_waveform, pdMS_TO_TICKS(200)))
+        {
+            ESP_LOGI(RADIO_TRANSMITTER_TAG, "Transmitting data!");
+
+            radio_state->waveform = current_waveform;
+            radio_transmitter_transmit();
+
+            xQueueReset(radio_state->waveform_queue);
+        }
+        vTaskDelay(500 / portTICK_PERIOD_MS);
+    }
+    vTaskDelete(NULL);
+}
+
 // Write a frequency for a specific number of time into the Radio buffer as PWM.
 // Uses code from https://github.com/brainwagon/radio-encoders/blob/master/martin.c
-esp_err_t write_pulse(float freq, float ms, radio_waveform_data_t *waveform)
+esp_err_t radio_transmitter_write_pulse(float freq, float ms, radio_waveform_data_t *waveform)
 {
     // Convert ms to samples.
     uint32_t nsamp_bits = (uint32_t)roundf(radio_state->config.sample_rate * ms / 1000.) * radio_state->config.bits_per_sample;
 
+    //ESP_LOGW("BRUH!", "NOT GOOD! nsamp %d off %d len %d", nsamp_bits, waveform->current_offset_bit, waveform->buffer_bits_len);
     // Error check.
     if (waveform->current_offset_bit + nsamp_bits >= waveform->buffer_bits_len)
     {
@@ -41,7 +78,7 @@ esp_err_t write_pulse(float freq, float ms, radio_waveform_data_t *waveform)
 
     for (uint32_t i = 0; i < nsamp_bits; i += radio_state->config.bits_per_sample)
     {
-        waveform_osc *= m;
+        waveform->current_osc *= m;
         float r = crealf(waveform->current_osc);
 
         // Convert continuous sine wave into PWM signals.
@@ -93,7 +130,7 @@ void IRAM_ATTR waveform_isr(void *para)
     {
         // If fully transmitted, just consume interrupt.
         // Otherwise, play correct bit.
-        if (radio_state->waveform.current_transmit_bit < radio_state->buffer_bits_len)
+        if (radio_state->waveform.current_transmit_bit < radio_state->waveform.buffer_bits_len)
         {
             // Convert transmission bit into gpio level.
             uint32_t byte_idx = radio_state->waveform.current_transmit_bit / BYTE_SIZE;
@@ -102,14 +139,13 @@ void IRAM_ATTR waveform_isr(void *para)
 
             // Don't error check.
             //Even if it fails, it's worth to just continue as each interrupt is so short.
-            gpio_set_level(radio_state->config.gpio, level);
+            if (level)
+                GPIO.out_w1ts = ((uint32_t)1 << radio_state->config.gpio);
+            else
+                GPIO.out_w1tc = ((uint32_t)1 << radio_state->config.gpio);
 
+            // Keep track of transmit bit.
             ++radio_state->waveform.current_transmit_bit;
-        }
-        else
-        {
-            // Give semaphore back, radio no longer busy.
-            xSemaphoreGiveFromISR(radio_state->radio_busy_mutex, NULL);
         }
 
         TIMERG0.int_clr_timers.t1 = 1;
@@ -121,7 +157,7 @@ void IRAM_ATTR waveform_isr(void *para)
 }
 
 // Initialize timer with Radio options.
-esp_err_t radio_timer_init(void)
+esp_err_t radio_transmitter_timer_init(void)
 {
     // Init error.
     esp_err_t err = ESP_OK;
@@ -155,7 +191,7 @@ esp_err_t radio_timer_init(void)
 
     ESP_ERROR_VALIDATE("Radio Register Interrupt",
                        err,
-                       timer_isr_register(TIMER_GROUP_0, radio_state->config.timer, waveform_isr, (void *)radio_state->timer, ESP_INTR_FLAG_IRAM, NULL))
+                       timer_isr_register(TIMER_GROUP_0, radio_state->config.timer, waveform_isr, (void *)radio_state->config.timer, ESP_INTR_FLAG_IRAM, NULL))
 
     // Start timer from initialization.
     ESP_ERROR_VALIDATE("Radio Start Timer",
@@ -166,15 +202,18 @@ esp_err_t radio_timer_init(void)
 }
 
 // Initialize GPIO and Timer for Radio.
-esp_err_t radio_init(radio_config_t radio_config)
+esp_err_t radio_transmitter_init(radio_transmitter_config_t radio_config)
 {
     // Init error.
     esp_err_t err = ESP_OK;
 
     radio_state = (radio_state_t *)calloc(sizeof(radio_state_t), 1);
     radio_state->config = radio_config;
-    radio_state->waveform_queue = xQueueCreate(4, sizeof(radio_waveform_data_t));
-    radio_state->radio_busy_mutex = xSemaphoreCreateBinary();
+    radio_state->waveform_queue = xQueueCreate(1, sizeof(radio_waveform_data_t));
+
+    // Initialize semaphore.
+    radio_state->radio_busy_mutex = xSemaphoreCreateMutex();
+    xSemaphoreGive(radio_state->radio_busy_mutex);
 
     // GPIO configuration for transmission pin.
     gpio_config_t io_conf = {
@@ -193,59 +232,24 @@ esp_err_t radio_init(radio_config_t radio_config)
                        err,
                        gpio_set_direction(radio_state->config.gpio, GPIO_MODE_OUTPUT))
 
-    // Initialize RadioE timer.
+    // Initialize Radio timer.
     ESP_ERROR_VALIDATE("Radio Initialize Timer",
                        err,
-                       radio_timer_init())
+                       radio_transmitter_timer_init())
 
-    return ESP_OK;
-}
+    // Create data collection tasks.
+    BaseType_t xReturned;
+    xReturned = xTaskCreatePinnedToCore(
+        radio_transmitter_task_entry, // Function that implements the task.
+        "Radio Transmission System",  // Text name for the task.
+        RADIO_TRANSMITTER_STACK_SIZE, // Stack size in words, not bytes.
+        NULL,                         // Parameter passed into the task.
+        tskIDLE_PRIORITY,             // Priority at which the task is created.
+        NULL,
+        0); // Used to pass out the created task's handle.
 
-/*// Initialize Radio waveform buffer.
-esp_err_t radio_waveform_buffer_init()
-{
-    // Use calloc to start everything at 0.
-    radio_state->data.buffer = (uint8_t *)calloc(radio_state->data.buffer_len, sizeof(uint8_t));
-    if (!radio_state->data.buffer)
-    {
+    if (xReturned != pdPASS)
         return ESP_ERR_NO_MEM;
-    }
+
     return ESP_OK;
-}
-
-// Clear Radio waveform buffer.
-void radio_waveform_buffer_clear()
-{
-    // Free buffer pointer.
-    free(radio_state->data.buffer);
-}*/
-
-void radio_transmit(radio_state_t *radio_state)
-{
-    radio_state->waveform.current_transmit_bit = 0;
-}
-
-void radio_task_entry(void *arg)
-{
-    radio_state_t *radio_state = (radio_state_t *)arg;
-    radio_init(radio_state);
-
-    radio_waveform_data_t current_waveform;
-    for (;;)
-    {
-        if (xQueueReceive(radio_state->waveform_queue, &current_waveform, pdMS_TO_TICKS(200)))
-        {
-            // Transmission is now busy
-            if (xSemaphoreTake(radio_state->mutex, pdMS_TO_TICKS(50)) == pdTRUE)
-            {
-                ESP_LOGI(RADIO_TAG, "Transmitting data!");
-
-                radio_state->data = current_waveform;
-                radio_transmit(radio_state);
-            }
-            xQueueReset(radio_state->data_queue);
-            break;
-        }
-    }
-    vTaskDelete(NULL);
 }

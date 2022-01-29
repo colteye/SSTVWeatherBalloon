@@ -50,6 +50,9 @@
     "esp_types.h": "c",
     "gpio.h": "c",
     "gpio_types.h": "c",
-    "queue.h": "c"
+    "queue.h": "c",
+    "radio.h": "c",
+    "radio_transmitter.h": "c",
+    "convert.h": "c"
   }
 }
