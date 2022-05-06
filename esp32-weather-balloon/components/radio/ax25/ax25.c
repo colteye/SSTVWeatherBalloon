@@ -11,8 +11,8 @@
 #define AX25_AFSK1200_1200HZ (1200)
 #define AX25_AFSK1200_2200HZ (2200)
 
-#define AX25_AFSK2400_PREAMBLE_BYTES (25)
-#define AX25_AFSK2400_REST_BYTES (5)
+#define AX25_AFSK1200_PREAMBLE_BYTES (25)
+#define AX25_AFSK1200_REST_BYTES (5)
 
 // Based on https://github.com/satyendrakumarsingh/ISO-IEC-3309-compliant-16-bit-CRC-in-C-Language/blob/master/iso_iec_3309_crc.c
 esp_err_t ax25_iso_3099_fcs_checksum(uint8_t *data, uint8_t data_len, uint16_t *fcs)
@@ -58,7 +58,7 @@ esp_err_t ax25_generate_waveform(uint8_t *data, uint8_t data_len, radio_waveform
     uint16_t ax25_current_freq = AX25_AFSK1200_1200HZ;
 
     // Flag bytes (preamble).
-    for (uint8_t i = 0; i < AX25_AFSK2400_PREAMBLE_BYTES; ++i)
+    for (uint8_t i = 0; i < AX25_AFSK1200_PREAMBLE_BYTES; ++i)
         ESP_ERROR_VALIDATE("FLAG BYTE",
                            err,
                            ax25_byte(AX25_FLAG, &ax25_current_freq, ax25_buf))
@@ -113,7 +113,7 @@ esp_err_t ax25_generate_waveform(uint8_t *data, uint8_t data_len, radio_waveform
                            ax25_byte(fcs[i], &ax25_current_freq, ax25_buf))
 
     // Flag bytes (rest).
-    for (uint8_t i = 0; i < AX25_AFSK2400_REST_BYTES; ++i)
+    for (uint8_t i = 0; i < AX25_AFSK1200_REST_BYTES; ++i)
         ESP_ERROR_VALIDATE("FLAG BYTE",
                            err,
                            ax25_byte(AX25_FLAG, &ax25_current_freq, ax25_buf))
