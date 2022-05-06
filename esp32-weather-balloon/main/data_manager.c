@@ -7,17 +7,6 @@
 #include "radio_transmitter.h"
 #include "error_handling.h"
 
-// Waveform related defines
-#define BITS_PER_SAMPLE (2)
-#define SAMPLE_RATE (40000)
-#define WAVEFORM_GPIO (GPIO_NUM_2)
-
-#define NUM_PWM_LEVELS (BITS_PER_SAMPLE + 1)
-#define PWM_RANGE_ADDR (SINE_MAX - SINE_MIN) / (float)NUM_PWM_LEVELS
-
-#define WAVEFORM_TIMER_DIVIDER (APB_CLK_FREQ / (SAMPLE_RATE * BITS_PER_SAMPLE)) //Subtract to try to compensate for extra operations being done?
-#define WAVEFORM_TIMER (1)
-
 #define SSTV_TAG ("SSTV")
 #define AX25_TAG ("AX.25")
 
@@ -161,7 +150,6 @@ void data_manager_sstv_task_entry(void *arg)
     for (;;)
     {
         // Send to other tasks that sstv is not transmitting.
-
         // Set SSTV transmit status to 0, notify other tasks.
         while (xSemaphoreTake(sstv_transmit_mutex, pdMS_TO_TICKS(1000)) == pdFALSE)
             ;
@@ -232,7 +220,7 @@ esp_err_t data_manager_init()
                                                .sample_rate = SAMPLE_RATE,
                                                .timer = WAVEFORM_TIMER,
                                                .timer_divider = WAVEFORM_TIMER_DIVIDER,
-                                               .gpio = WAVEFORM_GPIO};
+                                               .gpio = RADIO_GPIO};
 
     ESP_ERROR_VALIDATE("Data Manager Radio Init", err, radio_transmitter_init(radio_config))
 
@@ -260,8 +248,8 @@ esp_err_t data_manager_init()
         DATA_MANAGER_STACK_SIZE,                // Stack size in words, not bytes.
         (void *)radio_transmitter_get_config(), // Parameter passed into the task.
         tskIDLE_PRIORITY,                       // Priority at which the task is created.
-        &xSSTVHandle,
-        1); // Used to pass out the created task's handle.
+        &xSSTVHandle,                           // Used to pass out the created task's handle.
+        1);
 
     if (xReturned != pdPASS)
         return ESP_ERR_NO_MEM;

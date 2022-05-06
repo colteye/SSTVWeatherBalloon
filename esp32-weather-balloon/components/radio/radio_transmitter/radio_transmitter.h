@@ -36,7 +36,23 @@
 #include "freertos/task.h"
 #include "freertos/queue.h"
 
+#define HAM_CALLSIGN ("XXXXX")
+#define HAM_CALLSIGN_LEN (5)
+#define HAM_SSID (6)
+
 #define BYTE_SIZE (8)
+
+// Waveform related defines
+
+#define BITS_PER_SAMPLE (2)
+#define SAMPLE_RATE (40000)
+#define RADIO_GPIO (GPIO_NUM_2)
+
+#define NUM_PWM_LEVELS (BITS_PER_SAMPLE + 1)
+#define PWM_RANGE_ADDR (SINE_MAX - SINE_MIN) / (float)NUM_PWM_LEVELS
+
+#define WAVEFORM_TIMER_DIVIDER (APB_CLK_FREQ / (SAMPLE_RATE * BITS_PER_SAMPLE)) // Subtract to try to compensate for extra operations being done?
+#define WAVEFORM_TIMER (1)
 
 #define SINE_MIN (-0.25f)
 #define SINE_MAX (0.25f)

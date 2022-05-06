@@ -10,4 +10,6 @@
 // Convert from a uint16_t to alternate form (Helpful for the BMP280).
 #define U16_2_U16_LE(b) ((b >> 8) | (b << 8))
 
+#define N_BIT(b, n) ((b >> n) & 1)
+
 #endif // _CONVERT_H

@@ -61,13 +61,12 @@ static void radio_transmitter_task_entry(void *arg)
 }
 
 // Write a frequency for a specific number of time into the Radio buffer as PWM.
-// Uses code from https://github.com/brainwagon/radio-encoders/blob/master/martin.c
+// Uses code from https://github.com/brainwagon/sstv-encoders/blob/master/martin.c
 esp_err_t radio_transmitter_write_pulse(float freq, float ms, radio_waveform_data_t *waveform)
 {
     // Convert ms to samples.
     uint32_t nsamp_bits = (uint32_t)roundf(radio_state->config.sample_rate * ms / 1000.) * radio_state->config.bits_per_sample;
 
-    //ESP_LOGW("BRUH!", "NOT GOOD! nsamp %d off %d len %d", nsamp_bits, waveform->current_offset_bit, waveform->buffer_bits_len);
     // Error check.
     if (waveform->current_offset_bit + nsamp_bits >= waveform->buffer_bits_len)
     {
@@ -138,7 +137,7 @@ void IRAM_ATTR waveform_isr(void *para)
             uint8_t level = (radio_state->waveform.buffer[byte_idx] & BIT(bit_idx)) > 0;
 
             // Don't error check.
-            //Even if it fails, it's worth to just continue as each interrupt is so short.
+            // Even if it fails, it's worth to just continue as each interrupt is so short.
             if (level)
                 GPIO.out_w1ts = ((uint32_t)1 << radio_state->config.gpio);
             else

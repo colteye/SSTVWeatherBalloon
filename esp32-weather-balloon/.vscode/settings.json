@@ -53,6 +53,7 @@
     "queue.h": "c",
     "radio.h": "c",
     "radio_transmitter.h": "c",
-    "convert.h": "c"
+    "convert.h": "c",
+    "cstddef": "c"
   }
 }
