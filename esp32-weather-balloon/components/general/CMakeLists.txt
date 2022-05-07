@@ -1,4 +1,4 @@
 idf_component_register(
-    SRCS "convert.h"
+    SRCS "bit_ops.h"
     INCLUDE_DIRS .
 )

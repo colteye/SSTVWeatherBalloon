@@ -24,57 +24,9 @@
 // Entry point for ESP32 weather balloon code.                               //
 // ------------------------------------------------------------------------- //
 
-#include <esp_log.h>
-#include <esp_system.h>
-#include <sys/param.h>
-#include <string.h>
-
-#include "freertos/FreeRTOS.h"
-#include "freertos/task.h"
-#include "freertos/queue.h"
-
 #include "data_manager.h"
 
 void app_main()
 {
-    /*// Initialize I2C for the BMP250 and MPU6050.
-    i2c_master_init();
-
-    gps_init();
-    mpu6050_init();
-    bmp280_init();
-    gps_data_out_t gps_data;
-    bmp280_data_out_t bmp280_data;
-    mpu6050_data_out_t mpu6050_data;
-    for (int i = 0; i < 100; ++i)
-    {
-        mpu6050_read(&mpu6050_data);
-        ESP_LOGI("MPU6050 Read", "TEMP: %.6f", mpu6050_data.temperature);
-        ESP_LOGI("MPU6050 Read", "ROTATION X: %.6f", mpu6050_data.gyro_x);
-        ESP_LOGI("MPU6050 Read", "ROTATION Y: %.6f", mpu6050_data.gyro_y);
-        ESP_LOGI("MPU6050 Read", "ROTATION Z: %.6f\n", mpu6050_data.gyro_z);
-        ESP_LOGI("MPU6050 Read", "ACCEL X: %.6f", mpu6050_data.acc_x);
-        ESP_LOGI("MPU6050 Read", "ACCEL Y: %.6f", mpu6050_data.acc_y);
-        ESP_LOGI("MPU6050 Read", "ACCEL Z: %.6f\n", mpu6050_data.acc_z);
-
-        bmp280_read(&bmp280_data);
-        ESP_LOGI("BMP280 Read", "TEMP: %.6f", bmp280_data.temperature);
-        ESP_LOGI("BMP280 Read", "PRESSURE: %.6f", bmp280_data.pressure);
-        ESP_LOGI("BMP280 Read", "ALTITUDE: %.6f\n", bmp280_data.altitude);
-
-        gps_read(&gps_data);
-        ESP_LOGI("GPS Read", "LATITUDE: %.6f", gps_data.latitude);
-        ESP_LOGI("GPS Read", "LONGITUDE: %.6f", gps_data.longitude);
-        ESP_LOGI("GPS Read", "ALTITUDE: %.6f", gps_data.altitude);
-        ESP_LOGI("GPS Read", "SPEED: %.6f\n", gps_data.speed);
-
-        vTaskDelay(1000 / portTICK_PERIOD_MS);
-    }
-    gps_deinit();
-    i2c_master_deinit();
-
-    // Create task for taking SSTV pictures.
-    xTaskCreate(SSTVCameraServiceTask, "SSTV Camera Service", 4096, NULL, tskIDLE_PRIORITY, NULL);*/
-
     data_manager_init();
 }

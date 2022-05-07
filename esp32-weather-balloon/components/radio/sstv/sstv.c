@@ -27,7 +27,7 @@
 #include "sstv.h"
 #include "sstv_luts.h"
 
-#include "convert.h"
+#include "bit_ops.h"
 #include "error_handling.h"
 
 // Pick color channel for SSTV scanlines

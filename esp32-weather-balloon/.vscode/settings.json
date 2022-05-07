@@ -54,6 +54,9 @@
     "radio.h": "c",
     "radio_transmitter.h": "c",
     "convert.h": "c",
-    "cstddef": "c"
-  }
+    "cstddef": "c",
+    "data_manager.h": "c",
+    "ax25.h": "c"
+  },
+  "idf.adapterTargetName": "esp32"
 }

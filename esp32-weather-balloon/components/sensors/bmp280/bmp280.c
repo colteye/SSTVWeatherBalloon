@@ -2,7 +2,7 @@
 #include "bmp280.h"
 #include "error_handling.h"
 #include "sensor_i2c.h"
-#include "convert.h"
+#include "bit_ops.h"
 
 // Sea level HPA for altitude calculations (depends on location and time!)
 #define SEALEVEL_HPA (1018.0f)

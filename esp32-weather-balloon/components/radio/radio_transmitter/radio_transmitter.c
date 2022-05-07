@@ -13,6 +13,7 @@ typedef struct
     radio_waveform_data_t waveform;
     xQueueHandle waveform_queue; // Radio waveform queue handle
     xSemaphoreHandle radio_busy_mutex;
+    uint8_t transmitting;
 
 } radio_state_t;
 
@@ -36,24 +37,32 @@ xQueueHandle radio_transmitter_get_waveform_queue(void)
     return radio_state->waveform_queue;
 }
 
-void radio_transmitter_transmit(void)
-{
-    radio_state->waveform.current_transmit_bit = 0;
-}
-
 static void radio_transmitter_task_entry(void *arg)
 {
+
     radio_waveform_data_t current_waveform;
     for (;;)
     {
+        // if there is an item in the queue, transmit it!
         if (xQueueReceive(radio_state->waveform_queue, &current_waveform, pdMS_TO_TICKS(200)))
         {
             ESP_LOGI(RADIO_TRANSMITTER_TAG, "Transmitting data!");
 
+            // Begin transmission!
             radio_state->waveform = current_waveform;
-            radio_transmitter_transmit();
-
-            xQueueReset(radio_state->waveform_queue);
+            radio_state->transmitting = 1;
+            radio_state->waveform.current_transmit_bit = 0;
+        }
+        else
+        {
+            if (!uxQueueMessagesWaiting(radio_state->waveform_queue) && !radio_state->transmitting)
+            {
+                if (xSemaphoreTake(radio_state->radio_busy_mutex, pdMS_TO_TICKS(1000)) == pdFALSE)
+                {
+                    // Tell other processes that radio is no longer busy.
+                    xSemaphoreGive(radio_state->radio_busy_mutex);
+                }
+            }
         }
         vTaskDelay(500 / portTICK_PERIOD_MS);
     }
@@ -81,8 +90,8 @@ esp_err_t radio_transmitter_write_pulse(float freq, float ms, radio_waveform_dat
         float r = crealf(waveform->current_osc);
 
         // Convert continuous sine wave into PWM signals.
-        float min = SINE_MIN;
-        float max = SINE_MIN + radio_state->config.pwm_range_addr;
+        float min = R_SINE_MIN;
+        float max = R_SINE_MIN + radio_state->config.pwm_range_addr;
         for (uint8_t j = 0; j < radio_state->config.num_pwm_levels; ++j)
         {
             if (IN_RANGE(min, max, r))
@@ -146,6 +155,8 @@ void IRAM_ATTR waveform_isr(void *para)
             // Keep track of transmit bit.
             ++radio_state->waveform.current_transmit_bit;
         }
+        else
+            radio_state->transmitting = 0;
 
         TIMERG0.int_clr_timers.t1 = 1;
     }
@@ -155,7 +166,7 @@ void IRAM_ATTR waveform_isr(void *para)
     TIMERG0.hw_timer[timer_idx].config.alarm_en = TIMER_ALARM_EN;
 }
 
-// Initialize timer with Radio options.
+// Initialize timer with radio options.
 esp_err_t radio_transmitter_timer_init(void)
 {
     // Init error.
@@ -208,7 +219,7 @@ esp_err_t radio_transmitter_init(radio_transmitter_config_t radio_config)
 
     radio_state = (radio_state_t *)calloc(sizeof(radio_state_t), 1);
     radio_state->config = radio_config;
-    radio_state->waveform_queue = xQueueCreate(1, sizeof(radio_waveform_data_t));
+    radio_state->waveform_queue = xQueueCreate(2, sizeof(radio_waveform_data_t));
 
     // Initialize semaphore.
     radio_state->radio_busy_mutex = xSemaphoreCreateMutex();

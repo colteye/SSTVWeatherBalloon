@@ -1,7 +1,7 @@
 #include "mpu6050.h"
 #include "error_handling.h"
 #include "sensor_i2c.h"
-#include "convert.h"
+#include "bit_ops.h"
 
 // Helpful conversion factors.
 #define SENSORS_GRAVITY_EARTH (9.80665F)

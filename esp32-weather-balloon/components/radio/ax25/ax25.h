@@ -34,6 +34,6 @@
 // Dont need to divide vTaskDelay by anything, as 1 tick = 1 ms
 
 // Generate AX25 waveform from image!
-esp_err_t ax25_generate_waveform(uint8_t *data, uint8_t data_len, radio_waveform_data_t *sstv_buf);
+esp_err_t ax25_generate_waveform(uint8_t *data, uint8_t data_len, radio_waveform_data_t *ax25_buf);
 
 #endif // _AX25_H

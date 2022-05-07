@@ -3,7 +3,7 @@
 
 // Camera pins used for ESP Camera.
 #define CAM_PIN_PWDN (32)
-#define CAM_PIN_RESET (-1) //software reset will be performed
+#define CAM_PIN_RESET (-1) // software reset will be performed
 #define CAM_PIN_XCLK (0)
 #define CAM_PIN_SIOD (26)
 #define CAM_PIN_SIOC (27)
@@ -51,11 +51,11 @@ esp_err_t camera_init()
         .ledc_timer = LEDC_TIMER_0,
         .ledc_channel = LEDC_CHANNEL_0,
 
-        .pixel_format = PIXFORMAT_RGB565, //YUV422,GRAYSCALE,RGB565,JPEG
-        .frame_size = FRAMESIZE_QVGA,     //QQVGA-UXGA Do not use sizes above QVGA when not JPEG
+        .pixel_format = PIXFORMAT_RGB565, // YUV422,GRAYSCALE,RGB565,JPEG
+        .frame_size = FRAMESIZE_QVGA,     // QQVGA-UXGA Do not use sizes above QVGA when not JPEG
 
-        .jpeg_quality = 10, //0-63 lower number means higher quality
-        .fb_count = 1,      //if more than one, i2s runs in continuous mode. Use only with JPEG
+        .jpeg_quality = 10, // 0-63 lower number means higher quality
+        .fb_count = 1,      // if more than one, i2s runs in continuous mode. Use only with JPEG
         .grab_mode = CAMERA_GRAB_WHEN_EMPTY,
     };
 

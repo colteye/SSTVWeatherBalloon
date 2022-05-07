@@ -1,5 +1,5 @@
-#ifndef _CONVERT_H
-#define _CONVERT_H
+#ifndef _BITOPS_H
+#define _BITOPS_H
 
 // Convert from two uint8_ts into a uint16_t.
 #define U8S_2_U16(b0, b1) (((uint16_t)b0 << 8) | b1)
@@ -12,4 +12,4 @@
 
 #define N_BIT(b, n) ((b >> n) & 1)
 
-#endif // _CONVERT_H
+#endif // _BITOPS_H
