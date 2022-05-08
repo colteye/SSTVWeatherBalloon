@@ -12,7 +12,7 @@ typedef struct
     radio_transmitter_config_t config;
     radio_waveform_data_t waveform;
     xQueueHandle waveform_queue; // Radio waveform queue handle
-    xSemaphoreHandle radio_busy_mutex;
+    xSemaphoreHandle radio_busy_semaphore;
     uint8_t transmitting;
 
 } radio_state_t;
@@ -27,46 +27,14 @@ radio_transmitter_config_t *radio_transmitter_get_config(void)
     return &radio_state->config;
 }
 
-xSemaphoreHandle radio_transmitter_get_mutex(void)
+xSemaphoreHandle radio_transmitter_get_semaphore(void)
 {
-    return radio_state->radio_busy_mutex;
+    return radio_state->radio_busy_semaphore;
 }
 
 xQueueHandle radio_transmitter_get_waveform_queue(void)
 {
     return radio_state->waveform_queue;
-}
-
-static void radio_transmitter_task_entry(void *arg)
-{
-
-    radio_waveform_data_t current_waveform;
-    for (;;)
-    {
-        // if there is an item in the queue, transmit it!
-        if (xQueueReceive(radio_state->waveform_queue, &current_waveform, pdMS_TO_TICKS(200)))
-        {
-            ESP_LOGI(RADIO_TRANSMITTER_TAG, "Transmitting data!");
-
-            // Begin transmission!
-            radio_state->waveform = current_waveform;
-            radio_state->transmitting = 1;
-            radio_state->waveform.current_transmit_bit = 0;
-        }
-        else
-        {
-            if (!uxQueueMessagesWaiting(radio_state->waveform_queue) && !radio_state->transmitting)
-            {
-                if (xSemaphoreTake(radio_state->radio_busy_mutex, pdMS_TO_TICKS(1000)) == pdFALSE)
-                {
-                    // Tell other processes that radio is no longer busy.
-                    xSemaphoreGive(radio_state->radio_busy_mutex);
-                }
-            }
-        }
-        vTaskDelay(500 / portTICK_PERIOD_MS);
-    }
-    vTaskDelete(NULL);
 }
 
 // Write a frequency for a specific number of time into the Radio buffer as PWM.
@@ -119,6 +87,7 @@ esp_err_t radio_transmitter_write_pulse(float freq, float ms, radio_waveform_dat
     // Allows next write pulse to automatically write to next part of buffer
     // Similar to file pointer
     waveform->current_offset_bit += nsamp_bits;
+
     return ESP_OK;
 }
 
@@ -136,28 +105,32 @@ void IRAM_ATTR waveform_isr(void *para)
     // Clear the interrupt.
     if ((intr_status & BIT(timer_idx)) && timer_idx == radio_state->config.timer)
     {
-        // If fully transmitted, just consume interrupt.
+        // If not transmitting, just consume interrupt.
         // Otherwise, play correct bit.
-        if (radio_state->waveform.current_transmit_bit < radio_state->waveform.buffer_bits_len)
+        if (radio_state->transmitting)
         {
-            // Convert transmission bit into gpio level.
-            uint32_t byte_idx = radio_state->waveform.current_transmit_bit / BYTE_SIZE;
-            uint8_t bit_idx = radio_state->waveform.current_transmit_bit % BYTE_SIZE;
-            uint8_t level = (radio_state->waveform.buffer[byte_idx] & BIT(bit_idx)) > 0;
+            if (radio_state->waveform.current_transmit_bit < radio_state->waveform.buffer_bits_len)
+            {
+                // Convert transmission bit into gpio level.
+                uint32_t byte_idx = radio_state->waveform.current_transmit_bit / BYTE_SIZE;
+                uint8_t bit_idx = radio_state->waveform.current_transmit_bit % BYTE_SIZE;
+                uint8_t level = (radio_state->waveform.buffer[byte_idx] & BIT(bit_idx)) > 0;
 
-            // Don't error check.
-            // Even if it fails, it's worth to just continue as each interrupt is so short.
-            if (level)
-                GPIO.out_w1ts = ((uint32_t)1 << radio_state->config.gpio);
+                // Don't error check.
+                // Even if it fails, it's worth to just continue as each interrupt is so short.
+                if (level)
+                    GPIO.out_w1ts = ((uint32_t)1 << radio_state->config.gpio);
+                else
+                    GPIO.out_w1tc = ((uint32_t)1 << radio_state->config.gpio);
+
+                // Keep track of transmit bit.
+                ++radio_state->waveform.current_transmit_bit;
+            }
             else
-                GPIO.out_w1tc = ((uint32_t)1 << radio_state->config.gpio);
-
-            // Keep track of transmit bit.
-            ++radio_state->waveform.current_transmit_bit;
+            {
+                radio_state->transmitting = 0;
+            }
         }
-        else
-            radio_state->transmitting = 0;
-
         TIMERG0.int_clr_timers.t1 = 1;
     }
 
@@ -211,19 +184,48 @@ esp_err_t radio_transmitter_timer_init(void)
     return ESP_OK;
 }
 
+void radio_transmitter_task_entry(void *arg)
+{
+    radio_waveform_data_t current_waveform;
+    for (;;)
+    {
+        // if there is an item in the queue, transmit it!
+        if (xQueueReceive(radio_state->waveform_queue, &current_waveform, pdMS_TO_TICKS(200)))
+        {
+            ESP_LOGI(RADIO_TRANSMITTER_TAG, "Transmitting data!");
+
+            // Begin transmission!
+            radio_state->waveform = current_waveform;
+            radio_state->waveform.current_transmit_bit = 0;
+            radio_state->transmitting = 1;
+        }
+        else if (!radio_state->transmitting)
+        {
+            // Notify tasks that radio is now free!
+            xSemaphoreGive(radio_state->radio_busy_semaphore);
+        }
+
+        // Infinite loop delay.
+        vTaskDelay(1000 / portTICK_PERIOD_MS);
+    }
+    vTaskDelete(NULL);
+}
+
 // Initialize GPIO and Timer for Radio.
 esp_err_t radio_transmitter_init(radio_transmitter_config_t radio_config)
 {
     // Init error.
     esp_err_t err = ESP_OK;
 
+    // Initialize radio state before entering task!
     radio_state = (radio_state_t *)calloc(sizeof(radio_state_t), 1);
     radio_state->config = radio_config;
-    radio_state->waveform_queue = xQueueCreate(2, sizeof(radio_waveform_data_t));
+    radio_state->waveform_queue = xQueueCreate(1, sizeof(radio_waveform_data_t));
 
-    // Initialize semaphore.
-    radio_state->radio_busy_mutex = xSemaphoreCreateMutex();
-    xSemaphoreGive(radio_state->radio_busy_mutex);
+    // Initialize semaphore and set transmission state.
+    radio_state->transmitting = 0;
+    radio_state->radio_busy_semaphore = xSemaphoreCreateBinary();
+    xSemaphoreGive(radio_state->radio_busy_semaphore);
 
     // GPIO configuration for transmission pin.
     gpio_config_t io_conf = {

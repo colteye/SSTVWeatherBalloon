@@ -22,7 +22,7 @@ typedef struct
 } sensor_data_t;
 
 uint8_t camera_transmit_status;
-xSemaphoreHandle camera_transmit_mutex;
+xSemaphoreHandle camera_transmit_semaphore;
 
 // Initialize radio waveform buffer.
 esp_err_t waveform_buffer_init(radio_waveform_data_t *waveform, uint32_t len)
@@ -56,25 +56,12 @@ void waveform_buffer_deinit(radio_waveform_data_t *waveform)
     free(waveform->buffer);
 }
 
-void data_manager_task_entry(void *arg)
+void sensor_transmit_task_entry(void *arg)
 {
     // Init error.
     esp_err_t err = ESP_OK;
 
     radio_transmitter_config_t *radio_config = (radio_transmitter_config_t *)arg;
-
-    // Camera data waveform (SSTV)!
-    // SSTV messages take about 110 seconds to run completely.
-    uint8_t sstv_seconds = 110;
-    uint32_t sstv_buf_len = (radio_config->sample_rate * radio_config->bits_per_sample * sstv_seconds) / BYTE_SIZE;
-
-    radio_waveform_data_t sstv_buf = {.current_osc = 0.25,
-                                      .current_transmit_bit = 0xFFFFFFFF,
-                                      .current_offset_bit = 0,
-
-                                      .clip_seconds = sstv_seconds,
-                                      .buffer_bits_len = sstv_buf_len * BYTE_SIZE,
-                                      .buffer = NULL};
 
     // Sensor data waveform (AX.25)!
     // AX.25 messages typically only take 1 second with current data.
@@ -90,42 +77,26 @@ void data_manager_task_entry(void *arg)
                                       .buffer = NULL};
 
     // Try to initialize different sensing/comms systems!
-
-    /*i2c_master_init();
-    camera_init();
-    gps_init();
-    mpu6050_init();
-    bmp280_init();*/
-
     ESP_ERROR_REDO_TASK_VALIDATE("I2C Initialize", i2c_master_init, 100, 16);
-
-    ESP_ERROR_REDO_TASK_VALIDATE("Camera Initialize", camera_init, 100, 16);
-
     ESP_ERROR_REDO_TASK_VALIDATE("GPS Initialize", gps_init, 100, 16);
     ESP_ERROR_REDO_TASK_VALIDATE("MPU6050 Initialize", mpu6050_init, 100, 16);
     ESP_ERROR_REDO_TASK_VALIDATE("BMP280 Initialize", bmp280_init, 100, 16);
     sensor_data_t sensors_data;
 
-    // Initialize buffers.
+    // Initialize buffer.
     ESP_ERROR_TASK_VALIDATE("AX25 Buffer Initialize", err, waveform_buffer_init(&ax25_buf, ax25_buf_len))
-    ESP_ERROR_TASK_VALIDATE("SSTV Buffer Initialize", err, waveform_buffer_init(&sstv_buf, sstv_buf_len))
 
-    // Get waveform queue and mutex from radio transmitter.
-    xSemaphoreHandle radio_busy_mutex = radio_transmitter_get_mutex();
+    // Get waveform queue and semaphore from radio transmitter.
+    xSemaphoreHandle radio_busy_semaphore = radio_transmitter_get_semaphore();
     xQueueHandle waveform_queue = radio_transmitter_get_waveform_queue();
 
     for (;;)
     {
-        // Take radio mutex once radio is no long busy!
-        // In this achitecture, the radio is the one that notifies tasks that it is free.
-        while (xSemaphoreTake(radio_busy_mutex, pdMS_TO_TICKS(1000)) == pdFALSE)
-            ;
+        // ------------------------- //
+        // SENSOR AX25 WAVEFORM DATA //
+        // ------------------------- //
 
-        // -------------------------------- //
-        // CREATE SENSOR AX25 WAVEFORM DATA //
-        // -------------------------------- //
-
-        // Reset SSTV buffer variables and take a picture!
+        // Reset AX25 buffer variables and take a picture!
         ax25_buf.current_osc = 0.25;
         ax25_buf.current_transmit_bit = 0xFFFFFFFF;
         ax25_buf.current_offset_bit = 0;
@@ -162,9 +133,60 @@ void data_manager_task_entry(void *arg)
                                                            sizeof(sensor_data_t),
                                                            &ax25_buf))
 
-        // -------------------------------- //
-        // CREATE CAMERA SSTV WAVEFORM DATA //
-        // -------------------------------- //
+        // Take radio semaphore once radio is no longer busy!
+        // In this achitecture, the radio is the one that notifies tasks that it is free.
+        while (xSemaphoreTake(radio_busy_semaphore, pdMS_TO_TICKS(200)) == pdFALSE)
+            ;
+
+        // Send waveform to radio!
+        ESP_LOGI(AX25_TAG, "Transmitting Sensor AX.25 signal...");
+        xQueueSend(waveform_queue, (void *)&ax25_buf, pdMS_TO_TICKS(200));
+
+        // Loop Delay (dont allow AX25 waveforms to be generated while transmitting!).
+        vTaskDelay(ax25_seconds * 1000 / portTICK_PERIOD_MS);
+    }
+
+    // If finished, delete buffers and delete task.
+    waveform_buffer_deinit(&ax25_buf);
+
+    vTaskDelete(NULL);
+}
+
+void camera_transmit_task_entry(void *arg)
+{
+    // Init error.
+    esp_err_t err = ESP_OK;
+
+    radio_transmitter_config_t *radio_config = (radio_transmitter_config_t *)arg;
+
+    // Camera data waveform (SSTV)!
+    // SSTV messages take about 110 seconds to run completely.
+    uint8_t sstv_seconds = 110;
+    uint32_t sstv_buf_len = (radio_config->sample_rate * radio_config->bits_per_sample * sstv_seconds) / BYTE_SIZE;
+
+    radio_waveform_data_t sstv_buf = {.current_osc = 0.25,
+                                      .current_transmit_bit = 0xFFFFFFFF,
+                                      .current_offset_bit = 0,
+
+                                      .clip_seconds = sstv_seconds,
+                                      .buffer_bits_len = sstv_buf_len * BYTE_SIZE,
+                                      .buffer = NULL};
+
+    // Try to initialize different sensing/comms systems!
+    ESP_ERROR_REDO_TASK_VALIDATE("Camera Initialize", camera_init, 100, 16);
+
+    // Initialize buffer.
+    ESP_ERROR_TASK_VALIDATE("SSTV Buffer Initialize", err, waveform_buffer_init(&sstv_buf, sstv_buf_len))
+
+    // Get waveform queue and semaphore from radio transmitter.
+    xSemaphoreHandle radio_busy_semaphore = radio_transmitter_get_semaphore();
+    xQueueHandle waveform_queue = radio_transmitter_get_waveform_queue();
+
+    for (;;)
+    {
+        // ------------------------- //
+        // CAMERA SSTV WAVEFORM DATA //
+        // ------------------------- //
 
         // Reset SSTV buffer variables and take a picture!
         sstv_buf.current_osc = 0.25;
@@ -183,24 +205,21 @@ void data_manager_task_entry(void *arg)
                                     0,
                                     sstv_generate_waveform(pic, &sstv_buf))
 
-        // ---------------------- //
-        // TRANSMIT WAVEFORM DATA //
-        // ---------------------- //
+        // Take radio semaphore once radio is no longer busy!
+        // In this achitecture, the radio is the one that notifies tasks that it is free.
+        while (xSemaphoreTake(radio_busy_semaphore, pdMS_TO_TICKS(200)) == pdFALSE)
+            ;
 
-        // Send waveforms to radio queue!
-        ESP_LOGI(AX25_TAG, "Transmitting Sensor AX.25 signal...");
-        xQueueSend(waveform_queue, (void *)&ax25_buf, pdMS_TO_TICKS(200));
-
+        // Send waveform to radio!
         ESP_LOGI(SSTV_TAG, "Transmitting Camera SSTV signal...");
         xQueueSend(waveform_queue, (void *)&sstv_buf, pdMS_TO_TICKS(200));
 
-        // Infinite loop delay.
-        vTaskDelay(200 / portTICK_PERIOD_MS);
+        // Loop Delay (dont allow SSTV waveforms to be generated while transmitting!).
+        vTaskDelay(sstv_seconds * 1000 / portTICK_PERIOD_MS);
     }
 
-    // If finished, delete buffers and delete task.
+    // If finished, delete buffer and delete task.
     waveform_buffer_deinit(&sstv_buf);
-    waveform_buffer_deinit(&ax25_buf);
 
     vTaskDelete(NULL);
 }
@@ -223,16 +242,30 @@ esp_err_t data_manager_init()
 
     // Create tasks to collect data from all device sensors.
     BaseType_t xReturned;
-    xTaskHandle xDataHandle = NULL;
+    xTaskHandle xSensorTransmitHandle = NULL;
+    xTaskHandle xCameraTransmitHandle = NULL;
 
     // Create data collection task.
     xReturned = xTaskCreatePinnedToCore(
-        data_manager_task_entry,                // Function that implements the task.
-        "Data Management",                      // Text name for the task.
+        sensor_transmit_task_entry,             // Function that implements the task.
+        "Sensor Transmission",                  // Text name for the task.
         DATA_MANAGER_STACK_SIZE,                // Stack size in words, not bytes.
         (void *)radio_transmitter_get_config(), // Parameter passed into the task.
         tskIDLE_PRIORITY,                       // Priority at which the task is created.
-        &xDataHandle,                           // Used to pass out the created task's handle.
+        &xSensorTransmitHandle,                 // Used to pass out the created task's handle.
+        1);
+
+    if (xReturned != pdPASS)
+        return ESP_ERR_NO_MEM;
+
+    // Create data collection task.
+    xReturned = xTaskCreatePinnedToCore(
+        camera_transmit_task_entry,             // Function that implements the task.
+        "Camera Transmission",                  // Text name for the task.
+        DATA_MANAGER_STACK_SIZE,                // Stack size in words, not bytes.
+        (void *)radio_transmitter_get_config(), // Parameter passed into the task.
+        tskIDLE_PRIORITY,                       // Priority at which the task is created.
+        &xCameraTransmitHandle,                 // Used to pass out the created task's handle.
         1);
 
     if (xReturned != pdPASS)

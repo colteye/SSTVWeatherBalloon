@@ -45,7 +45,7 @@
 // Waveform related defines
 
 #define R_BITS_PER_SAMPLE (2)
-#define R_SAMPLE_RATE (20000)
+#define R_SAMPLE_RATE (40000)
 #define R_GPIO (GPIO_NUM_2)
 
 #define R_NUM_PWM_LEVELS (R_BITS_PER_SAMPLE + 1)
@@ -80,7 +80,7 @@ typedef struct
 } radio_waveform_data_t;
 
 radio_transmitter_config_t *radio_transmitter_get_config(void);
-xSemaphoreHandle radio_transmitter_get_mutex(void);
+xSemaphoreHandle radio_transmitter_get_semaphore(void);
 xQueueHandle radio_transmitter_get_waveform_queue(void);
 
 // Write a frequency for a specific number of time into the SSTV buffer as PWM.
